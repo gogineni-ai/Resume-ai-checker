@@ -1,7 +1,7 @@
 import httpx
 from ..config import settings
 
-def send_otp_email(to_email: str, code: str):
+def send_otp_email(to_email: str, code: str, purpose: str = "email verification"):
     if not settings.resend_api_key:
         raise RuntimeError("RESEND_API_KEY is not configured")
 
@@ -14,7 +14,7 @@ def send_otp_email(to_email: str, code: str):
         json={
             "from": settings.otp_from_email,
             "to": [to_email],
-            "subject": "Your Resume Verifier verification code",
+            "subject": f"Your Resume Verifier {purpose} code",
             "html": f"""
                 <h2>Resume Verifier AI</h2>
                 <p>Your verification code is:</p>

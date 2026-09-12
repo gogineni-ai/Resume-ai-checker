@@ -1,5 +1,5 @@
 export const API=process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
-const token=()=>typeof window!=='undefined'?localStorage.getItem('rv_token'):null
+const token=()=>typeof window!=='undefined'?(sessionStorage.getItem('rv_token')||localStorage.getItem('rv_token')):null
 async function request(path:string, init:RequestInit={}){
   const headers:any={...(init.headers||{})}; const t=token(); if(t)headers.Authorization=`Bearer ${t}`
   const r=await fetch(`${API}${path}`,{...init,headers});
@@ -29,12 +29,12 @@ export async function createJob(data:{company:string,title:string,description:st
 export async function analyze(resumeId:number,jobId?:number){const q=jobId?`?target_job_id=${jobId}`:'';return request(`/api/analyze/${resumeId}${q}`,{method:'POST'})}
 export async function getHistory(){return request('/api/analyses')}
 export async function getAnalysis(id:string|number){return request(`/api/analyses/${id}`)}
-export function saveSession(data:any){localStorage.setItem('rv_token',data.access_token);localStorage.setItem('rv_user',JSON.stringify(data.user))}
+export function saveSession(data:any,remember=false){logout();const store=remember?localStorage:sessionStorage;store.setItem('rv_token',data.access_token);store.setItem('rv_user',JSON.stringify(data.user))}
 export function setStoredUser(user:any){
-  localStorage.setItem('rv_user',JSON.stringify(user))
+  const store=sessionStorage.getItem('rv_token')?sessionStorage:localStorage;store.setItem('rv_user',JSON.stringify(user))
 }
-export function getStoredUser(){try{return JSON.parse(localStorage.getItem('rv_user')||'null')}catch{return null}}
-export function logout(){localStorage.removeItem('rv_token');localStorage.removeItem('rv_user')}
+export function getStoredUser(){try{return JSON.parse(sessionStorage.getItem('rv_user')||localStorage.getItem('rv_user')||'null')}catch{return null}}
+export function logout(){localStorage.removeItem('rv_token');localStorage.removeItem('rv_user');sessionStorage.removeItem('rv_token');sessionStorage.removeItem('rv_user');sessionStorage.removeItem('rv_last_analysis')}
 
 export async function requestOtp(channel:'email'|'phone'){
   return request('/api/auth/request-otp',{
@@ -51,3 +51,8 @@ export async function verifyOtp(channel:'email'|'phone',code:string){
     body:JSON.stringify({channel,code})
   })
 }
+
+export async function getCompanyEvidence(company:string,skill:string){return request(`/api/evidence?company=${encodeURIComponent(company)}&skill=${encodeURIComponent(skill)}`)}
+
+export function forgotPassword(email:string){return request('/api/auth/forgot-password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email})})}
+export function resetPassword(email:string,code:string,password:string){return request('/api/auth/reset-password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,code,password})})}

@@ -1,0 +1,8 @@
+'use client'
+import {useState} from 'react'
+import {getCompanyEvidence} from '../lib/api'
+export default function CompanyEvidence(){
+ const [company,setCompany]=useState(''),[skill,setSkill]=useState(''),[result,setResult]=useState<any>(null),[error,setError]=useState(''),[busy,setBusy]=useState(false)
+ async function search(e:React.FormEvent){e.preventDefault();setBusy(true);setError('');try{setResult(await getCompanyEvidence(company,skill))}catch(e:any){setError(e.message)}finally{setBusy(false)}}
+ return <section className="panel" style={{padding:20,marginBottom:20}}><h2>Company job-posting evidence</h2><p>Find dated postings advertising a technology. These do not establish first use or verify a person's employment.</p><form onSubmit={search}><label>Company<input required value={company} onChange={e=>setCompany(e.target.value)} placeholder="Google"/></label><label>Technology<input required value={skill} onChange={e=>setSkill(e.target.value)} placeholder="python"/></label><button className="primary" disabled={busy}>{busy?'Searching…':'Search evidence'}</button></form>{error&&<p role="alert">{error}</p>}{result&&<div role="status"><p>{result.evidence_count} postings found. Earliest dated posting: {result.earliest_dated_posting?.slice(0,10)||'Unknown — no dated evidence collected'}.</p>{result.examples.map((e:any,i:number)=><article key={i}><h3>{e.company} — {e.title}</h3><p>Posted: {e.posted_at?.slice(0,10)||'Unknown'} · Collected: {e.collected_at?.slice(0,10)}</p><blockquote>{e.snippet}</blockquote>{/^https:\/\//.test(e.source_url)&&<a href={e.source_url} target="_blank" rel="noreferrer">View source posting</a>}</article>)}</div>}</section>
+}

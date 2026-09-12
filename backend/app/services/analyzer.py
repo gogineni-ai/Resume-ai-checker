@@ -47,11 +47,13 @@ def analyze_evidence(resume_text: str, postings: list) -> dict:
     skills = extract_skills(resume_text)
     evidence = [evidence_for_skill(s, postings) for s in skills]
     if not evidence:
-        return {"evidence_score": 0, "timeline_score": 100, "skills": []}
+        return {"evidence_score": 0, "timeline_score": None, "skills": []}
     supported = sum(e["status"] in {"supported", "plausible"} for e in evidence)
     conflicts = sum(e["status"] == "timeline conflict" for e in evidence)
     return {
         "evidence_score": round(100 * supported / len(evidence), 1),
-        "timeline_score": round(100 * (1 - conflicts / len(evidence)), 1),
+        "timeline_score": None,
+        "timeline_note": "Not assessed: employment dates are not extracted or verified.",
+        "evidence_note": "Job postings support advertised skill demand, not personal employment or first technology use.",
         "skills": evidence,
     }

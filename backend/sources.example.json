@@ -1,0 +1,11 @@
+{
+  "sources": [
+    {"source": "greenhouse", "company": "Example Company", "board": "replace-with-board-token", "enabled": false},
+    {"source": "lever", "company": "Example Company", "board": "replace-with-site-name", "enabled": false},
+    {"source": "company", "company": "Google", "urls": [], "collection_permitted": false, "enabled": false},
+    {"source": "linkedin", "company": "Google", "licensed_feed_url": "", "token_env": "LINKEDIN_FEED_TOKEN", "collection_permitted": false, "enabled": false},
+    {"source": "indeed", "company": "Google", "licensed_feed_url": "", "token_env": "INDEED_FEED_TOKEN", "collection_permitted": false, "enabled": false},
+    {"source": "monster", "company": "Google", "licensed_feed_url": "", "token_env": "MONSTER_FEED_TOKEN", "collection_permitted": false, "enabled": false},
+    {"source": "dice", "company": "Google", "licensed_feed_url": "", "token_env": "DICE_FEED_TOKEN", "collection_permitted": false, "enabled": false}
+  ]
+}

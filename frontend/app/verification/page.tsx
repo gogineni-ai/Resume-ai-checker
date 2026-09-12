@@ -2,6 +2,7 @@
 
 import {useEffect,useMemo,useState} from 'react'
 import AppShell from '../../components/AppShell'
+import CompanyEvidence from '../../components/CompanyEvidence'
 import {getHistory,getStoredUser,requestOtp,verifyOtp,setStoredUser} from '../../lib/api'
 
 export default function Verification(){
@@ -20,6 +21,7 @@ export default function Verification(){
       .then((h:any[])=>{
         setSkills(h[0]?.result?.skills||[])
       })
+      .catch(()=>setOtpErr('Unable to load verification data. Please retry.'))
       .finally(()=>setLoading(false))
   },[])
 
@@ -46,88 +48,10 @@ export default function Verification(){
         </div>
       </div>
 
-      <section className="panel" style={{padding:20,marginBottom:20}}>
-        <h2 style={{marginTop:0}}>Account Verification</h2>
-        <p style={{marginTop:0}}>
-          Verify your email address with a 6-digit code.
-        </p>
-
-        <div style={{display:'grid',gap:12,maxWidth:520}}>
-          <div>
-            <b>Email</b>
-            <div>{user?.email||'No email found'}</div>
-          </div>
-
-          <div>
-            <b>Status</b>
-            <div>
-              {user?.email_verified
-                ? 'Verified'
-                : 'Not verified'}
-            </div>
-          </div>
-
-          {!user?.email_verified&&(
-            <>
-              <button
-                disabled={otpBusy}
-                onClick={async()=>{
-                  setOtpBusy(true)
-                  setOtpErr('')
-                  setOtpMsg('')
-                  try{
-                    await requestOtp('email')
-                    setOtpMsg('Verification code sent to your email.')
-                  }catch(e:any){
-                    setOtpErr(e.message||'Unable to send code')
-                  }finally{
-                    setOtpBusy(false)
-                  }
-                }}
-              >
-                {otpBusy?'Sending...':'Send verification code'}
-              </button>
-
-              <input
-                value={otp}
-                onChange={e=>setOtp(e.target.value.replace(/\D/g,'').slice(0,6))}
-                placeholder="Enter 6-digit code"
-                inputMode="numeric"
-              />
-
-              <button
-                disabled={otpBusy||otp.length!==6}
-                onClick={async()=>{
-                  setOtpBusy(true)
-                  setOtpErr('')
-                  setOtpMsg('')
-                  try{
-                    const r=await verifyOtp('email',otp)
-                    setUser(r.user)
-                    setStoredUser(r.user)
-                    setOtpMsg('Email verified successfully.')
-                    setOtp('')
-                  }catch(e:any){
-                    setOtpErr(e.message||'Invalid verification code')
-                  }finally{
-                    setOtpBusy(false)
-                  }
-                }}
-              >
-                Verify email
-              </button>
-            </>
-          )}
-
-          {otpMsg&&<div style={{color:'green'}}>{otpMsg}</div>}
-          {otpErr&&<div style={{color:'crimson'}}>{otpErr}</div>}
-        </div>
-      </section>
-
-      <section className="panel verifyPanel">
+      {otpErr&&<p role="alert">{otpErr}</p>}<CompanyEvidence/><section className="panel verifyPanel">
 
         <div className="tabs">
-          <b
+          <button type="button"
             onClick={()=>setTab('timeline')}
             style={{
               cursor:'pointer',
@@ -135,9 +59,9 @@ export default function Verification(){
             }}
           >
             Technology Timeline
-          </b>
+          </button>
 
-          <b
+          <button type="button"
             onClick={()=>setTab('company')}
             style={{
               cursor:'pointer',
@@ -145,7 +69,7 @@ export default function Verification(){
             }}
           >
             Company Evidence
-          </b>
+          </button>
         </div>
 
         {loading&&
