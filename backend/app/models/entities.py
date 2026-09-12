@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime, Float, ForeignKey, JSON, UniqueConstraint
+from sqlalchemy import Column, Integer, String, Text, DateTime, Date, Boolean, Float, ForeignKey, JSON, UniqueConstraint
 from sqlalchemy.sql import func
 from ..db import Base
 
@@ -7,8 +7,33 @@ class User(Base):
     id = Column(Integer, primary_key=True)
     name = Column(String(160), nullable=False)
     email = Column(String(255), nullable=False, unique=True, index=True)
-    phone = Column(String(40), nullable=True)
+    phone = Column(String(40), nullable=True, unique=True, index=True)
+    date_of_birth = Column(Date, nullable=True)
+    email_verified = Column(Boolean, nullable=False, default=False)
+    phone_verified = Column(Boolean, nullable=False, default=False)
     password_hash = Column(Text, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+class VerificationCode(Base):
+    __tablename__ = "verification_codes"
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    channel = Column(String(20), nullable=False)
+    destination = Column(String(255), nullable=False)
+    code_hash = Column(String(255), nullable=False)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    used_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+class VerificationCode(Base):
+    __tablename__ = "verification_codes"
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    channel = Column(String(20), nullable=False)
+    destination = Column(String(255), nullable=False)
+    code_hash = Column(String(255), nullable=False)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    used_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 class Resume(Base):

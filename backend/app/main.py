@@ -1,8 +1,9 @@
 from fastapi import FastAPI, UploadFile, File, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, EmailStr
+from datetime import date
 from sqlalchemy.orm import Session
-from sqlalchemy import select
+from sqlalchemy import select, text
 import threading
 from .db import Base, engine, get_db
 from .models.entities import User, Resume, JobPosting, Analysis
@@ -21,6 +22,28 @@ def initialize_database():
     def create_tables():
         try:
             Base.metadata.create_all(bind=engine)
+
+            if engine.dialect.name == "postgresql":
+                with engine.begin() as conn:
+                    conn.execute(text(
+                        "ALTER TABLE users ADD COLUMN IF NOT EXISTS date_of_birth DATE"
+                    ))
+                    conn.execute(text(
+                        "ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN NOT NULL DEFAULT FALSE"
+                    ))
+                    conn.execute(text(
+                        "ALTER TABLE users ADD COLUMN IF NOT EXISTS phone_verified BOOLEAN NOT NULL DEFAULT FALSE"
+                    ))
+
+                try:
+                    with engine.begin() as conn:
+                        conn.execute(text(
+                            "CREATE UNIQUE INDEX IF NOT EXISTS ux_users_phone "
+                            "ON users(phone) WHERE phone IS NOT NULL"
+                        ))
+                except Exception as index_exc:
+                    print(f"Phone unique index skipped: {index_exc}")
+
             print("Database tables initialized")
         except Exception as exc:
             print(f"Database initialization failed: {exc}")
@@ -30,6 +53,7 @@ class RegisterIn(BaseModel):
     name: str
     email: EmailStr
     phone: str | None = None
+    date_of_birth: date | None = None
     password: str
 class LoginIn(BaseModel):
     email: EmailStr
@@ -38,6 +62,7 @@ class LoginIn(BaseModel):
 class ProfileIn(BaseModel):
     name: str
     phone: str | None = None
+    date_of_birth: date | None = None
 
 class PasswordIn(BaseModel):
     current_password: str
@@ -51,7 +76,7 @@ class JobIn(BaseModel):
     source_url: str | None = None
     posted_at: str | None = None
 
-def public_user(u: User): return {"id":u.id,"name":u.name,"email":u.email,"phone":u.phone}
+def public_user(u: User): return {"id":u.id,"name":u.name,"email":u.email,"phone":u.phone,"date_of_birth":u.date_of_birth,"email_verified":u.email_verified,"phone_verified":u.phone_verified}
 
 @app.get("/health")
 def health(): return {"ok": True}
@@ -60,8 +85,18 @@ def health(): return {"ok": True}
 def register(body: RegisterIn, db: Session = Depends(get_db)):
     if len(body.password) < 8: raise HTTPException(400, "Password must be at least 8 characters")
     email = body.email.lower().strip()
-    if db.scalar(select(User).where(User.email == email)): raise HTTPException(409, "An account with this email already exists")
-    u = User(name=body.name.strip(), email=email, phone=(body.phone or "").strip() or None, password_hash=hash_password(body.password))
+    if db.scalar(select(User).where(User.email == email)):
+        raise HTTPException(409, "An account with this email already exists")
+    phone = (body.phone or "").strip() or None
+    if phone and db.scalar(select(User).where(User.phone == phone)):
+        raise HTTPException(409, "An account with this phone number already exists")
+    u = User(
+        name=body.name.strip(),
+        email=email,
+        phone=phone,
+        date_of_birth=body.date_of_birth,
+        password_hash=hash_password(body.password)
+    )
     db.add(u); db.commit(); db.refresh(u)
     return {"access_token": create_token(u.id), "user": public_user(u)}
 
@@ -84,8 +119,17 @@ def update_profile(
     if not name:
         raise HTTPException(400, "Full name is required")
 
+    phone = (body.phone or "").strip() or None
+    if phone:
+        existing_phone = db.scalar(
+            select(User).where(User.phone == phone, User.id != user.id)
+        )
+        if existing_phone:
+            raise HTTPException(409, "An account with this phone number already exists")
+
     user.name = name
-    user.phone = (body.phone or "").strip() or None
+    user.phone = phone
+    user.date_of_birth = body.date_of_birth
 
     db.add(user)
     db.commit()
