@@ -25,17 +25,6 @@ class VerificationCode(Base):
     used_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
-class VerificationCode(Base):
-    __tablename__ = "verification_codes"
-    id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
-    channel = Column(String(20), nullable=False)
-    destination = Column(String(255), nullable=False)
-    code_hash = Column(String(255), nullable=False)
-    expires_at = Column(DateTime(timezone=True), nullable=False)
-    used_at = Column(DateTime(timezone=True), nullable=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-
 class Resume(Base):
     __tablename__ = "resumes"
     id = Column(Integer, primary_key=True)
