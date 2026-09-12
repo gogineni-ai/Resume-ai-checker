@@ -10,6 +10,10 @@ from .collector import run_collection
 SOURCES = [
     {'source': 'lever', 'board': 'highstreetit', 'company': 'Highstreet'},
     {'source': 'greenhouse', 'board': 'sphereit', 'company': 'Sphere IT Consultants DWC LLC'},
+    {'source': 'lever', 'board': 'ciandt', 'company': 'CI&T'},
+    {'source': 'greenhouse', 'board': 'nice', 'company': 'NICE'},
+    {'source': 'greenhouse', 'board': 'accenturefederalservices', 'company': 'Accenture Federal Services'},
+    {'source': 'greenhouse', 'board': 'neweratech', 'company': 'New Era Technology'},
 ]
 
 def due_sources(now=None):
