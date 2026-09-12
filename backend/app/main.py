@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, EmailStr
 from sqlalchemy.orm import Session
 from sqlalchemy import select
+import threading
 from .db import Base, engine, get_db
 from .models.entities import User, Resume, JobPosting, Analysis
 from .services.parser import extract_text, parse_resume
@@ -12,9 +13,18 @@ from .services.taxonomy import extract_skills
 from .config import settings
 from .auth import hash_password, verify_password, create_token, current_user
 
-Base.metadata.create_all(bind=engine)
 app = FastAPI(title="Resume Verifier AI", version="1.0.0")
 app.add_middleware(CORSMiddleware, allow_origins=[x.strip() for x in settings.cors_origins.split(",")], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+
+@app.on_event("startup")
+def initialize_database():
+    def create_tables():
+        try:
+            Base.metadata.create_all(bind=engine)
+            print("Database tables initialized")
+        except Exception as exc:
+            print(f"Database initialization failed: {exc}")
+    threading.Thread(target=create_tables, daemon=True).start()
 
 class RegisterIn(BaseModel):
     name: str
