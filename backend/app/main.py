@@ -24,6 +24,15 @@ class RegisterIn(BaseModel):
 class LoginIn(BaseModel):
     email: EmailStr
     password: str
+
+class ProfileIn(BaseModel):
+    name: str
+    phone: str | None = None
+
+class PasswordIn(BaseModel):
+    current_password: str
+    new_password: str
+
 class JobIn(BaseModel):
     company: str
     title: str
@@ -54,6 +63,53 @@ def login(body: LoginIn, db: Session = Depends(get_db)):
 
 @app.get("/api/auth/me")
 def me(user: User = Depends(current_user)): return public_user(user)
+
+@app.put("/api/auth/profile")
+def update_profile(
+    body: ProfileIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user)
+):
+    name = body.name.strip()
+    if not name:
+        raise HTTPException(400, "Full name is required")
+
+    user.name = name
+    user.phone = (body.phone or "").strip() or None
+
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+
+    return {"user": public_user(user)}
+
+@app.put("/api/auth/password")
+def update_password(
+    body: PasswordIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user)
+):
+    if not verify_password(body.current_password, user.password_hash):
+        raise HTTPException(400, "Current password is incorrect")
+
+    if len(body.new_password) < 8:
+        raise HTTPException(
+            400,
+            "New password must be at least 8 characters"
+        )
+
+    if body.current_password == body.new_password:
+        raise HTTPException(
+            400,
+            "New password must be different"
+        )
+
+    user.password_hash = hash_password(body.new_password)
+
+    db.add(user)
+    db.commit()
+
+    return {"ok": True}
 
 @app.post("/api/resumes")
 async def upload_resume(file: UploadFile = File(...), db: Session = Depends(get_db), user: User = Depends(current_user)):
