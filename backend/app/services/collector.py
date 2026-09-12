@@ -76,8 +76,10 @@ async def collect_source(config):
         for row in rows:
             row['company']=company
             row['external_id']=board+':'+row['external_id']
-            # Public feeds do not promise original dates. updated_at is NOT datePosted.
-            row['posted_at']=None; row['date_basis']='unknown'
+            # Greenhouse's updated_at is not an original posting date. Lever's
+            # createdAt is retained by the adapter as a source creation date.
+            if source == 'greenhouse':
+                row['posted_at']=None; row['date_basis']='unknown'
         return rows
     if source=='company':
         if not config.get('collection_permitted'): raise ValueError('Confirm site collection permission in source configuration')
