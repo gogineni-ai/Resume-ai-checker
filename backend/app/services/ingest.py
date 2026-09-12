@@ -10,7 +10,6 @@ async def greenhouse_jobs(board_token: str):
     out=[]
     for j in data.get("jobs", []):
         desc = BeautifulSoup(j.get("content") or "", "html.parser").get_text(" ")
-        updated_at = j.get("updated_at")
         out.append({"source":"greenhouse","external_id":str(j["id"]),"company":board_token,"title":j.get("title",""),"location":(j.get("location") or {}).get("name"),"description":desc,"source_url":j.get("absolute_url"),"skills":extract_skills(desc),"posted_at":None,"date_basis":"unknown"})
     return out
 
@@ -21,6 +20,9 @@ async def lever_jobs(site: str):
     out=[]
     for j in data:
         desc = j.get("descriptionPlain") or BeautifulSoup(j.get("description") or "", "html.parser").get_text(" ")
+        for section in j.get("lists") or []:
+            desc += " " + (section.get("text") or "") + " " + BeautifulSoup(section.get("content") or "", "html.parser").get_text(" ")
+        desc += " " + (j.get("additionalPlain") or BeautifulSoup(j.get("additional") or "", "html.parser").get_text(" "))
         cats=j.get("categories") or {}
         created_at = j.get("createdAt")
         created = datetime.fromtimestamp(created_at / 1000, timezone.utc) if isinstance(created_at, (int,float)) else None

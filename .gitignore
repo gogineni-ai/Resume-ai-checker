@@ -6,3 +6,5 @@ node_modules/
 .next/
 *.db
 .DS_Store
+*.tsbuildinfo
+backend/sources.json

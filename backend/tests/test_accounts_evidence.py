@@ -20,7 +20,9 @@ def ctx(monkeypatch):
         with factory() as db: yield db
     main.app.dependency_overrides[get_db]=get_test_db
     sent=[]
-    monkeypatch.setattr(main,'send_otp_email',lambda email,code:sent.append((email,code)))
+    monkeypatch.setattr(main,'send_otp_email',lambda email,code,**kwargs:sent.append((email,code)))
+    codes=iter(['123456','234567','345678','456789','567890'])
+    monkeypatch.setattr(main,'generate_otp',lambda:next(codes))
     client=TestClient(main.app)
     yield client,factory,sent
     main.app.dependency_overrides.clear()
@@ -87,3 +89,30 @@ def test_jsonld_does_not_infer_date_from_description():
     rows=jsonld_postings(html,'https://example.com/job','Google')
     assert rows[0]['posted_at'] is None
     assert jsonld_postings(html,'https://example.com/job','Other Company')==[]
+
+def test_password_reset_revokes_session_and_cannot_verify_email(ctx):
+    client,factory,sent=ctx;headers=register(client)
+    response=client.post('/api/auth/forgot-password',json={'email':'test@example.com'})
+    assert response.status_code==200
+    code=sent[-1][1]
+    assert client.post('/api/auth/verify-otp',headers=headers,json={'channel':'email','code':code}).status_code==400
+    response=client.post('/api/auth/reset-password',json={'email':'test@example.com','code':code,'password':'new-fixture-password'})
+    assert response.status_code==200
+    assert client.get('/api/auth/me',headers=headers).status_code==401
+    assert client.post('/api/auth/login',json={'email':'test@example.com','password':'new-fixture-password'}).status_code==200
+    assert client.post('/api/auth/reset-password',json={'email':'test@example.com','code':code,'password':'another-fixture-password'}).status_code==400
+
+def test_docx_upload_analysis_and_history(ctx):
+    from io import BytesIO
+    from docx import Document
+    client,_,sent=ctx;headers=register(client)
+    client.post('/api/auth/verify-otp',headers=headers,json={'channel':'email','code':sent[-1][1]})
+    document=Document();document.add_paragraph('Python developer with SQL and machine learning experience.')
+    data=BytesIO();document.save(data)
+    uploaded=client.post('/api/resumes',headers=headers,files={'file':('fixture.docx',data.getvalue(),'application/vnd.openxmlformats-officedocument.wordprocessingml.document')})
+    assert uploaded.status_code==200
+    assert 'python' in uploaded.json()['parsed']['skills']
+    result=client.post('/api/analyze/'+str(uploaded.json()['id']),headers=headers)
+    assert result.status_code==200
+    assert result.json()['timeline_score'] is None
+    assert client.get('/api/analyses',headers=headers).json()[0]['id']==result.json()['analysis_id']

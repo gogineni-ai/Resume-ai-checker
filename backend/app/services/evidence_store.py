@@ -2,7 +2,7 @@ import hashlib
 import json
 import re
 from datetime import datetime, timezone
-from sqlalchemy import select
+from sqlalchemy import select, func
 from ..models.entities import JobPosting
 from ..models.evidence import PostingSnapshot
 from .taxonomy import extract_skills, SKILLS
@@ -49,7 +49,7 @@ def store_posting(db, row):
 
 def company_evidence(db, company, skill):
     canonical = skill.strip().lower()
-    rows = db.scalars(select(PostingSnapshot).where(PostingSnapshot.company.ilike(company.strip())).order_by(PostingSnapshot.posted_at.asc(), PostingSnapshot.id.asc())).all()
+    rows = db.scalars(select(PostingSnapshot).where(func.lower(PostingSnapshot.company) == company.strip().lower()).order_by(PostingSnapshot.posted_at.asc(), PostingSnapshot.id.asc())).all()
     hits = [r for r in rows if canonical in r.skills]
     dated = [r for r in hits if r.posted_at]
     earliest = min((r.posted_at for r in dated), default=None)
