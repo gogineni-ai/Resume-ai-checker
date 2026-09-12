@@ -35,3 +35,19 @@ export function setStoredUser(user:any){
 }
 export function getStoredUser(){try{return JSON.parse(localStorage.getItem('rv_user')||'null')}catch{return null}}
 export function logout(){localStorage.removeItem('rv_token');localStorage.removeItem('rv_user')}
+
+export async function requestOtp(channel:'email'|'phone'){
+  return request('/api/auth/request-otp',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({channel})
+  })
+}
+
+export async function verifyOtp(channel:'email'|'phone',code:string){
+  return request('/api/auth/verify-otp',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({channel,code})
+  })
+}
