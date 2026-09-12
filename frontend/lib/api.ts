@@ -6,7 +6,7 @@ async function request(path:string, init:RequestInit={}){
   if(!r.ok){let msg=await r.text();try{msg=JSON.parse(msg).detail||msg}catch{};throw new Error(msg)}
   return r.json()
 }
-export async function register(data:{name:string,email:string,phone:string,password:string}){return request('/api/auth/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)})}
+export async function register(data:{name:string,email:string,phone:string,date_of_birth:string|null,password:string}){return request('/api/auth/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)})}
 export async function login(data:{email:string,password:string}){return request('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)})}
 export async function me(){return request('/api/auth/me')}
 export async function updateProfile(data:{name:string,phone:string}){
