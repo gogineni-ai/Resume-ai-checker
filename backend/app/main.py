@@ -1,12 +1,14 @@
 from fastapi import FastAPI, UploadFile, File, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, EmailStr
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 from sqlalchemy.orm import Session
 from sqlalchemy import select, text
 import threading
+import secrets
+import hashlib
 from .db import Base, engine, get_db
-from .models.entities import User, Resume, JobPosting, Analysis
+from .models.entities import User, Resume, JobPosting, Analysis, VerificationCode
 from .services.parser import extract_text, parse_resume
 from .services.analyzer import compare_resume_to_job, analyze_evidence
 from .services.ingest import greenhouse_jobs, lever_jobs
@@ -68,6 +70,20 @@ class PasswordIn(BaseModel):
     current_password: str
     new_password: str
 
+class OtpRequestIn(BaseModel):
+    channel: str
+
+class OtpVerifyIn(BaseModel):
+    channel: str
+    code: str
+
+class OtpRequestIn(BaseModel):
+    channel: str
+
+class OtpVerifyIn(BaseModel):
+    channel: str
+    code: str
+
 class JobIn(BaseModel):
     company: str
     title: str
@@ -77,6 +93,13 @@ class JobIn(BaseModel):
     posted_at: str | None = None
 
 def public_user(u: User): return {"id":u.id,"name":u.name,"email":u.email,"phone":u.phone,"date_of_birth":u.date_of_birth,"email_verified":u.email_verified,"phone_verified":u.phone_verified}
+
+def generate_otp():
+    return f"{secrets.randbelow(1000000):06d}"
+
+def hash_otp(code: str):
+    return hashlib.sha256(code.encode()).hexdigest()
+
 
 @app.get("/health")
 def health(): return {"ok": True}
@@ -99,6 +122,34 @@ def register(body: RegisterIn, db: Session = Depends(get_db)):
     )
     db.add(u); db.commit(); db.refresh(u)
     return {"access_token": create_token(u.id), "user": public_user(u)}
+
+@app.post("/api/auth/request-otp")
+def request_otp(body: OtpRequestIn, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    channel = body.channel.lower().strip()
+
+    if channel not in ("email", "phone"):
+        raise HTTPException(400, "Channel must be email or phone")
+
+    destination = user.email if channel == "email" else user.phone
+
+    if not destination:
+        raise HTTPException(400, f"No {channel} is available for this account")
+
+    code = generate_otp()
+    expires_at = datetime.now(timezone.utc) + timedelta(minutes=10)
+
+    otp = VerificationCode(
+        user_id=user.id,
+        channel=channel,
+        destination=destination,
+        code_hash=hash_otp(code),
+        expires_at=expires_at
+    )
+
+    db.add(otp)
+    db.commit()
+
+    return {"ok": True, "channel": channel, "expires_in_minutes": 10, "dev_code": code}
 
 @app.post("/api/auth/login")
 def login(body: LoginIn, db: Session = Depends(get_db)):
