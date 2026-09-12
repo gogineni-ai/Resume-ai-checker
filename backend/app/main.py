@@ -13,6 +13,7 @@ from .services.parser import extract_text, parse_resume
 from .services.analyzer import compare_resume_to_job, analyze_evidence
 from .services.ingest import greenhouse_jobs, lever_jobs
 from .services.taxonomy import extract_skills
+from .services.email_service import send_otp_email
 from .config import settings
 from .auth import hash_password, verify_password, create_token, current_user
 
@@ -149,7 +150,13 @@ def request_otp(body: OtpRequestIn, db: Session = Depends(get_db), user: User = 
     db.add(otp)
     db.commit()
 
-    return {"ok": True, "channel": channel, "expires_in_minutes": 10, "dev_code": code}
+    if channel == "email":
+        try:
+            send_otp_email(destination, code)
+        except Exception as exc:
+            raise HTTPException(500, f"Unable to send verification email: {exc}")
+
+    return {"ok": True, "channel": channel, "expires_in_minutes": 10}
 
 @app.post("/api/auth/login")
 def login(body: LoginIn, db: Session = Depends(get_db)):
