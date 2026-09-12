@@ -5,6 +5,9 @@ from datetime import date, datetime, timedelta, timezone
 from sqlalchemy.orm import Session
 from sqlalchemy import select, text, inspect, update
 import threading
+import asyncio
+import os
+from contextlib import suppress
 import secrets
 import hashlib
 import hmac
@@ -24,6 +27,21 @@ from .auth import hash_password, verify_password, create_token, current_user
 
 app = FastAPI(title="Resume Verifier AI", version="1.0.0")
 app.add_middleware(CORSMiddleware, allow_origins=[x.strip() for x in settings.cors_origins.split(",")], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+
+@app.on_event("startup")
+async def start_evidence_refresh():
+    # Startup handlers run in registration order; defer until all initialization finishes.
+    if os.environ.get('EVIDENCE_COLLECTION_ENABLED') == 'true':
+        from .services.evidence_refresh import refresh_loop
+        app.state.evidence_task = asyncio.create_task(refresh_loop())
+
+@app.on_event("shutdown")
+async def stop_evidence_refresh():
+    task = getattr(app.state, 'evidence_task', None)
+    if task:
+        task.cancel()
+        with suppress(asyncio.CancelledError):
+            await task
 
 @app.on_event("startup")
 def initialize_database():

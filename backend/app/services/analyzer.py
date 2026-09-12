@@ -40,7 +40,7 @@ def evidence_for_skill(skill: str, postings: list, claimed_start_year: int | Non
     if conflict: status = "timeline conflict"
     elif hits: status = "supported"
     elif release_year and claimed_start_year and claimed_start_year >= release_year: status = "plausible"
-    else: status = "weak evidence"
+    else: status = "no archived evidence"
     return {"skill": skill, "status": status, "release_year": release_year, "first_seen_in_archive": first_seen, "evidence_count": len(hits), "examples": hits[:5]}
 
 def analyze_evidence(resume_text: str, postings: list) -> dict:

@@ -56,3 +56,5 @@ export async function getCompanyEvidence(company:string,skill:string){return req
 
 export function forgotPassword(email:string){return request('/api/auth/forgot-password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email})})}
 export function resetPassword(email:string,code:string,password:string){return request('/api/auth/reset-password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,code,password})})}
+
+export async function getCollectionStatus(){return request('/api/evidence/collection-status')}
