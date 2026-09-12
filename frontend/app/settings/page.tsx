@@ -1,0 +1,3 @@
+'use client'
+import AppShell from '../../components/AppShell';import {getStoredUser} from '../../lib/api'
+export default function Settings(){const u=typeof window!=='undefined'?getStoredUser():null;return <AppShell><div className="pageTitle"><div><h1>Account Settings</h1><p>Your Resume Verifier AI profile.</p></div></div><section className="panel settingsCard"><label>Full Name<input value={u?.name||''} readOnly/></label><label>Email Address<input value={u?.email||''} readOnly/></label><label>Phone Number<input value={u?.phone||''} readOnly/></label><p className="muted">Profile editing and password reset can be added in the next backend iteration.</p></section></AppShell>}

@@ -1,0 +1,26 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: resume_verifier
+      POSTGRES_USER: resume
+      POSTGRES_PASSWORD: resume
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports: ["5432:5432"]
+  backend:
+    build: ./backend
+    environment:
+      DATABASE_URL: postgresql+psycopg://resume:resume@db:5432/resume_verifier
+      CORS_ORIGINS: http://localhost:3000
+      AUTH_SECRET: local-dev-secret-change-me
+    ports: ["8000:8000"]
+    depends_on: [db]
+  frontend:
+    build: ./frontend
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+    ports: ["3000:3000"]
+    depends_on: [backend]
+volumes:
+  pgdata:

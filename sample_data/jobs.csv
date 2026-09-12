@@ -1,0 +1,3 @@
+company,title,location,posted_at,description,source_url
+ExampleCo,Senior Python Developer,Dallas TX,2024-02-01,"Python FastAPI PostgreSQL Docker Kubernetes AWS REST APIs",https://example.com/job/1
+ExampleCo,Frontend Engineer,Austin TX,2023-06-15,"React TypeScript Next.js GitHub Actions",https://example.com/job/2
