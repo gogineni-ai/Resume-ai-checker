@@ -1,8 +1,10 @@
 import httpx
+import logging
 from ..config import settings
 
 def send_otp_email(to_email: str, code: str, purpose: str = "email verification"):
     if not settings.resend_api_key:
+        logging.getLogger(__name__).error('Email delivery failed: provider key not configured')
         raise RuntimeError("RESEND_API_KEY is not configured")
 
     response = httpx.post(
@@ -25,5 +27,8 @@ def send_otp_email(to_email: str, code: str, purpose: str = "email verification"
         timeout=15.0,
     )
 
+    if response.is_error:
+        # Log only status, never response bodies, recipients, credentials or codes.
+        logging.getLogger(__name__).error('Email delivery rejected by provider: HTTP %s', response.status_code)
     response.raise_for_status()
     return response.json()
