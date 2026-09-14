@@ -16,3 +16,4 @@ python-dateutil==2.9.0.post0
 pytest==8.4.1
 
 email-validator==2.2.0
+cryptography>=46.0.0,<47

@@ -26,6 +26,8 @@ from .config import settings
 from .auth import hash_password, verify_password, create_token, current_user
 
 app = FastAPI(title="Resume Verifier AI", version="1.0.0")
+from .services.gmail_connection import router as gmail_router
+app.include_router(gmail_router)
 app.add_middleware(CORSMiddleware, allow_origins=[x.strip() for x in settings.cors_origins.split(",")], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
 @app.on_event("startup")
