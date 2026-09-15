@@ -69,6 +69,10 @@ def jsonld_postings(html, url, company):
 
 async def collect_source(config):
     source=config['source']; company=config['company'].strip()
+    if source == 'career_html':
+        from .career_crawler import crawl_careers
+        rows, _ = await crawl_careers(config)
+        return rows
     if source in ('greenhouse','lever'):
         board=config['board']
         if not re.fullmatch(r'[A-Za-z0-9_-]+',board): raise ValueError('Invalid board identifier')

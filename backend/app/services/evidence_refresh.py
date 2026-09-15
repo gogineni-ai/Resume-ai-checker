@@ -1,6 +1,8 @@
 """Refresh a small, operator-owned public board list while the web service is awake."""
 import asyncio
 import logging
+import json
+import os
 from datetime import datetime, timedelta, timezone
 from sqlalchemy import select
 from ..db import SessionLocal
@@ -20,7 +22,12 @@ def due_sources(now=None):
     now = now or datetime.now(timezone.utc)
     due = []
     with SessionLocal() as db:
-        for source in SOURCES:
+        extra = json.loads(os.environ.get('CAREER_HTML_SOURCES', '[]'))
+        if not isinstance(extra, list) or len(extra) > 500:
+            raise ValueError('CAREER_HTML_SOURCES must contain at most 500 career sites')
+        for source in SOURCES + [dict(item, source='career_html') for item in extra]:
+            if not source.get('enabled', True):
+                continue
             last = db.scalar(select(CollectionRun).where(
                 CollectionRun.source == source['source'],
                 CollectionRun.company == source['company'],
@@ -30,8 +37,9 @@ def due_sources(now=None):
                 stamp = stamp.replace(tzinfo=timezone.utc)
             delay = timedelta(days=1) if last and last.status == 'success' else timedelta(hours=1)
             if stamp is None or now - stamp >= delay:
-                due.append(source)
-    return due
+                due.append((stamp or datetime.min.replace(tzinfo=timezone.utc), source))
+    # Oldest/never-checked sources first, so failing sites cannot starve others.
+    return [source for _, source in sorted(due, key=lambda item: item[0])[:20]]
 
 async def refresh_loop():
     while True:
