@@ -20,6 +20,7 @@ from .services.evidence_store import company_evidence, store_posting, parse_post
 from .services.parser import extract_text, parse_resume
 from .services.analyzer import compare_resume_to_job, analyze_evidence
 from .services.rag import summarize as rag_summarize
+from .services.cross_source import check_consistency
 from fastapi.responses import Response
 from docx import Document
 from io import BytesIO
@@ -290,6 +291,7 @@ def analyze(resume_id: int, target_job_id: int | None = None, db: Session = Depe
     overall = match["ats_score"] if target else evidence["evidence_score"]
     result = {"resume_id":resume.id,"resume_filename":resume.filename,"target_job_id":target_job_id,"target_title":target.title if target else None,"target_company":target.company if target else None,"overall_score":overall,**match,**evidence}
     result['rag'] = rag_summarize(resume.raw_text, postings)
+    result['cross_source_consistency'] = check_consistency(resume.raw_text, postings)
     row=Analysis(user_id=user.id,resume_id=resume.id,target_job_id=target_job_id,overall_score=overall or 0,ats_score=match["ats_score"] or 0,evidence_score=evidence["evidence_score"],timeline_score=evidence["timeline_score"] or 0,result=result)
     db.add(row); db.commit(); db.refresh(row); result["analysis_id"] = row.id
     return result
