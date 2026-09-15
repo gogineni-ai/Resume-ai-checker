@@ -29,6 +29,7 @@ export async function createJob(data:{company:string,title:string,description:st
 export async function analyze(resumeId:number,jobId?:number){const q=jobId?`?target_job_id=${jobId}`:'';return request(`/api/analyze/${resumeId}${q}`,{method:'POST'})}
 export async function getHistory(){return request('/api/analyses')}
 export async function getAnalysis(id:string|number){return request(`/api/analyses/${id}`)}
+export async function downloadReport(id:string|number,format:'docx'|'pdf'){const t=token();const r=await fetch(`${API}/api/analyses/${id}/report.${format}`,{headers:t?{Authorization:`Bearer ${t}`}:{}});if(!r.ok)throw new Error(await r.text());const blob=await r.blob();const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`resume-analysis-${id}.${format}`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
 export function saveSession(data:any,remember=false){logout();const store=remember?localStorage:sessionStorage;store.setItem('rv_token',data.access_token);store.setItem('rv_user',JSON.stringify(data.user))}
 export function setStoredUser(user:any){
   const store=sessionStorage.getItem('rv_token')?sessionStorage:localStorage;store.setItem('rv_user',JSON.stringify(user))

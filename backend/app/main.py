@@ -19,6 +19,12 @@ from .models.evidence import PostingSnapshot, CollectionRun
 from .services.evidence_store import company_evidence, store_posting, parse_posted_at
 from .services.parser import extract_text, parse_resume
 from .services.analyzer import compare_resume_to_job, analyze_evidence
+from .services.rag import summarize as rag_summarize
+from fastapi.responses import Response
+from docx import Document
+from io import BytesIO
+from reportlab.lib.pagesizes import LETTER
+from reportlab.pdfgen.canvas import Canvas
 from .services.ingest import greenhouse_jobs, lever_jobs
 from .services.taxonomy import extract_skills
 from .services.email_service import send_otp_email
@@ -283,6 +289,7 @@ def analyze(resume_id: int, target_job_id: int | None = None, db: Session = Depe
         match = compare_resume_to_job(resume.raw_text, target.description)
     overall = match["ats_score"] if target else evidence["evidence_score"]
     result = {"resume_id":resume.id,"resume_filename":resume.filename,"target_job_id":target_job_id,"target_title":target.title if target else None,"target_company":target.company if target else None,"overall_score":overall,**match,**evidence}
+    result['rag'] = rag_summarize(resume.raw_text, postings)
     row=Analysis(user_id=user.id,resume_id=resume.id,target_job_id=target_job_id,overall_score=overall or 0,ats_score=match["ats_score"] or 0,evidence_score=evidence["evidence_score"],timeline_score=evidence["timeline_score"] or 0,result=result)
     db.add(row); db.commit(); db.refresh(row); result["analysis_id"] = row.id
     return result
@@ -297,6 +304,41 @@ def analysis_detail(analysis_id: int, db: Session = Depends(get_db), user: User 
     row = db.get(Analysis, analysis_id)
     if not row or row.user_id != user.id: raise HTTPException(404, "Analysis not found")
     return {"id":row.id,"created_at":row.created_at,"result":row.result}
+
+def _owned_analysis(analysis_id, db, user):
+    row=db.get(Analysis,analysis_id)
+    if not row or row.user_id != user.id: raise HTTPException(404,'Analysis not found')
+    return row
+
+@app.get('/api/analyses/{analysis_id}/report.docx')
+def report_docx(analysis_id:int, db:Session=Depends(get_db), user:User=Depends(verified_user)):
+    row=_owned_analysis(analysis_id,db,user); result=row.result
+    doc=Document(); doc.add_heading('Resume Verifier AI Report',0); doc.add_paragraph(result.get('resume_filename',''))
+    doc.add_heading('Scores',1); doc.add_paragraph(f"Overall: {result.get('overall_score')}; Skills match: {result.get('skill_match_score')}; Evidence: {result.get('evidence_score')}")
+    doc.add_heading('Matched skills',1); doc.add_paragraph(', '.join(result.get('matched_skills',[])) or 'None')
+    doc.add_heading('Missing skills',1); doc.add_paragraph(', '.join(result.get('missing_skills',[])) or 'None')
+    doc.add_heading('Evidence and limitations',1); doc.add_paragraph(result.get('evidence_note','Job postings indicate advertised demand and do not verify employment.'))
+    if result.get('rag',{}).get('summary'): doc.add_heading('Grounded AI review',1); doc.add_paragraph(result['rag']['summary'])
+    data=BytesIO(); doc.save(data)
+    return Response(data.getvalue(),media_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document',headers={'Content-Disposition':f'attachment; filename="resume-analysis-{analysis_id}.docx"'})
+
+@app.get('/api/analyses/{analysis_id}/report.pdf')
+def report_pdf(analysis_id:int, db:Session=Depends(get_db), user:User=Depends(verified_user)):
+    row=_owned_analysis(analysis_id,db,user); result=row.result
+    data=BytesIO(); canvas=Canvas(data,pagesize=LETTER); _, height=LETTER; y=height-54
+    def line(value=''):
+        nonlocal y
+        for part in str(value).splitlines() or ['']:
+            if y < 54: canvas.showPage(); y=height-54
+            canvas.drawString(54,y,part[:110]); y-=15
+    canvas.setFont('Helvetica-Bold',18); line('Resume Verifier AI Report'); canvas.setFont('Helvetica',10)
+    line(result.get('resume_filename','')); line('Scores')
+    line(f"Overall: {result.get('overall_score')}; Skills match: {result.get('skill_match_score')}; Evidence: {result.get('evidence_score')}")
+    line('Matched skills: '+(', '.join(result.get('matched_skills',[])) or 'None'))
+    line('Missing skills: '+(', '.join(result.get('missing_skills',[])) or 'None'))
+    line('Evidence and limitations: '+result.get('evidence_note','Job postings indicate advertised demand and do not verify employment.'))
+    if result.get('rag',{}).get('summary'): line('Grounded AI review: '+result['rag']['summary'])
+    canvas.save(); return Response(data.getvalue(),media_type='application/pdf',headers={'Content-Disposition':f'attachment; filename="resume-analysis-{analysis_id}.pdf"'})
 
 @app.get("/api/evidence")
 def evidence_lookup(company: str, skill: str, db: Session = Depends(get_db), user: User = Depends(verified_user)):
