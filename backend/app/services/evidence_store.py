@@ -48,12 +48,19 @@ def store_posting(db, row):
     return existing
 
 def company_evidence(db, company, skill):
-    canonical = skill.strip().lower()
+    query = re.sub(r'\s+', ' ', skill.strip().lower())
+    canonical = next((name for name, aliases in SKILLS.items() if query == name or query in aliases), query)
     rows = db.scalars(select(PostingSnapshot).where(func.lower(PostingSnapshot.company) == company.strip().lower()).order_by(PostingSnapshot.posted_at.asc(), PostingSnapshot.id.asc())).all()
     hits = [r for r in rows if canonical in r.skills]
     dated = [r for r in hits if r.posted_at]
     earliest = min((r.posted_at for r in dated), default=None)
+    examples = []
+    seen = set()
+    for row in hits:
+        if row.job_id not in seen:
+            examples.append(row)
+            seen.add(row.job_id)
     return {'company': company, 'skill': canonical, 'earliest_dated_posting': earliest,
             'interpretation': 'Dated job-posting evidence of advertised skill demand; not proof of first technology use or individual employment.',
             'evidence_count': len({r.job_id for r in hits}), 'dated_evidence_count': len({r.job_id for r in dated}),
-            'examples': [{'job_id':r.job_id, 'company':r.company, 'title':r.title, 'source':r.source, 'source_url':r.source_url, 'posted_at':r.posted_at, 'collected_at':r.collected_at, 'date_basis':r.date_basis, 'snippet':snippet(r.description,canonical)} for r in hits[:50]]}
+            'examples': [{'job_id':r.job_id, 'company':r.company, 'title':r.title, 'source':r.source, 'source_url':r.source_url, 'posted_at':r.posted_at, 'collected_at':r.collected_at, 'date_basis':r.date_basis, 'snippet':snippet(r.description,canonical)} for r in examples[:50]]}

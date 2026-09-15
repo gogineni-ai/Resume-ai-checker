@@ -283,7 +283,7 @@ def analyze(resume_id: int, target_job_id: int | None = None, db: Session = Depe
         match = compare_resume_to_job(resume.raw_text, target.description)
     overall = match["ats_score"] if target else evidence["evidence_score"]
     result = {"resume_id":resume.id,"resume_filename":resume.filename,"target_job_id":target_job_id,"target_title":target.title if target else None,"target_company":target.company if target else None,"overall_score":overall,**match,**evidence}
-    row=Analysis(user_id=user.id,resume_id=resume.id,target_job_id=target_job_id,overall_score=overall,ats_score=match["ats_score"],evidence_score=evidence["evidence_score"],timeline_score=evidence["timeline_score"] or 0,result=result)
+    row=Analysis(user_id=user.id,resume_id=resume.id,target_job_id=target_job_id,overall_score=overall or 0,ats_score=match["ats_score"] or 0,evidence_score=evidence["evidence_score"],timeline_score=evidence["timeline_score"] or 0,result=result)
     db.add(row); db.commit(); db.refresh(row); result["analysis_id"] = row.id
     return result
 

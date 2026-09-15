@@ -16,16 +16,25 @@ TECH_START_YEAR = {
 
 def text_similarity(a: str, b: str) -> float:
     if not a.strip() or not b.strip(): return 0.0
-    X = TfidfVectorizer(stop_words="english", ngram_range=(1,2), max_features=8000).fit_transform([a,b])
+    try:
+        X = TfidfVectorizer(stop_words="english", ngram_range=(1,2), max_features=8000).fit_transform([a,b])
+    except ValueError as error:
+        if 'empty vocabulary' not in str(error):
+            raise
+        return 0.0
     return float(cosine_similarity(X[0:1], X[1:2])[0][0])
 
 def compare_resume_to_job(resume_text: str, job_text: str) -> dict:
     rskills = set(extract_skills(resume_text)); jskills = set(extract_skills(job_text))
     matched = sorted(rskills & jskills); missing = sorted(jskills - rskills)
-    skill_score = 100.0 if not jskills else 100 * len(matched) / len(jskills)
+    skill_score = 100 * len(matched) / len(jskills) if jskills else None
     sim = 100 * text_similarity(resume_text, job_text)
-    ats = round(0.7 * skill_score + 0.3 * sim, 1)
-    return {"ats_score": ats, "matched_skills": matched, "missing_skills": missing, "semantic_similarity": round(sim,1)}
+    ats = round(0.7 * skill_score + 0.3 * sim, 1) if skill_score is not None else None
+    return {"ats_score": ats, "skill_match_score": skill_score,
+            "match_assessed": ats is not None,
+            "match_note": 'Heuristic: 70% recognized skill coverage and 30% shared wording. Does not assess proficiency, seniority, or required versus preferred qualifications.' if jskills else 'Not assessed: no recognized job skills. Add specific technology requirements or review the job manually.',
+            "matched_skills": matched, "missing_skills": missing,
+            "semantic_similarity": round(sim,1), "text_similarity": round(sim,1)}
 
 def evidence_for_skill(skill: str, postings: list, claimed_start_year: int | None = None) -> dict:
     hits = []

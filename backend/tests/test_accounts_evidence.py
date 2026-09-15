@@ -90,6 +90,40 @@ def test_jsonld_does_not_infer_date_from_description():
     assert rows[0]['posted_at'] is None
     assert jsonld_postings(html,'https://example.com/job','Other Company')==[]
 
+
+def test_company_alias_lookup_and_snapshot_examples(ctx):
+    _, factory, _ = ctx
+    row = {'source':'company','external_id':'alias-fixture','company':'Example Company',
+           'title':'Engineer','description':'Oracle Integration Cloud required.',
+           'source_url':'https://example.com/job','posted_at':'2020-01-01','date_basis':'source_datePosted'}
+    with factory() as db:
+        store_posting(db,row);db.commit()
+        row['description'] += ' SQL preferred.'
+        store_posting(db,row);db.commit()
+        result = company_evidence(db,'example company','Oracle Integration Cloud')
+        assert result['skill'] == 'oic'
+        assert result['evidence_count'] == 1
+        assert len(result['examples']) == 1
+        assert company_evidence(db,'Other Company','oic')['evidence_count'] == 0
+
+
+def test_unknown_job_match_is_persisted_as_unassessed(ctx):
+    from app.models.entities import Resume, JobPosting
+    client,factory,sent=ctx
+    headers=register(client)
+    client.post('/api/auth/verify-otp',headers=headers,json={'channel':'email','code':sent[-1][1]})
+    with factory() as db:
+        user=db.scalar(select(User))
+        resume=Resume(user_id=user.id,filename='fixture.txt',raw_text='Python developer',parsed={})
+        job=JobPosting(source='manual',company='Example',title='Unknown',description='Friendly team benefits',skills=[])
+        db.add_all([resume,job]);db.commit()
+        resume_id,job_id=resume.id,job.id
+    response=client.post(f'/api/analyze/{resume_id}?target_job_id={job_id}',headers=headers)
+    assert response.status_code==200
+    assert response.json()['overall_score'] is None
+    result=client.get('/api/analyses/'+str(response.json()['analysis_id']),headers=headers).json()['result']
+    assert result['match_assessed'] is False
+
 def test_password_reset_revokes_session_and_cannot_verify_email(ctx):
     client,factory,sent=ctx;headers=register(client)
     response=client.post('/api/auth/forgot-password',json={'email':'test@example.com'})
