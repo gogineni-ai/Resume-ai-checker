@@ -229,6 +229,17 @@ class ChatMessageIn(BaseModel):
     message: str
 
 
+class CoachMessageIn(BaseModel):
+    role: Literal["user", "assistant", "system"]
+    content: str
+
+
+class CoachChatRequest(BaseModel):
+    messages: list[CoachMessageIn]
+    resume_context: str | None = None
+    job_context: str | None = None
+
+
 class RewriteIn(BaseModel):
     tone: str | None = "confident"
     custom_prompt: str | None = None
@@ -613,6 +624,50 @@ def analysis_rewrite(analysis_id: int, body: RewriteIn | None = None, db: Sessio
         ],
         "suggested_title": target.title if target else "Relevant Engineering Role",
     }
+
+
+@app.post("/api/coach/chat")
+def coach_chat(body: CoachChatRequest, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    del db, user
+    if not body.messages:
+        raise HTTPException(400, "At least one chat message is required")
+
+    system_prompt = (
+        "You are an expert career and resume coach. You help candidates identify skill gaps, optimize phrasing, "
+        "critique impact metrics, and prepare for interviews based on their resume and targeted roles. "
+        "Keep answers concise, actionable, and structured with clean bullet points where appropriate."
+    )
+
+    resume_context = (body.resume_context or "").strip()
+    job_context = (body.job_context or "").strip()
+
+    system_message = {"role": "system", "content": system_prompt}
+    context_blocks = []
+    if resume_context:
+        context_blocks.append({"role": "system", "content": f"Resume context:\n{resume_context}"})
+    if job_context:
+        context_blocks.append({"role": "system", "content": f"Job context:\n{job_context}"})
+
+    messages = [system_message, *context_blocks, *[{"role": msg.role, "content": msg.content} for msg in body.messages]]
+
+    if not settings.openai_api_key:
+        last_user_message = next((m.content for m in reversed(body.messages) if m.role == "user"), "Can you help me improve my resume?")
+        return {"reply": f"AI helper is not configured. Based on your last message, focus on: \n- Clarify your strongest impact metrics\n- Add the missing role-specific skills\n- Rewrite the top bullets to align with the target role.\n\nYour prompt: {last_user_message}"}
+
+    try:
+        from openai import OpenAI
+
+        client = OpenAI(api_key=settings.openai_api_key)
+        completion = client.chat.completions.create(
+            model=settings.openai_model,
+            temperature=0.4,
+            messages=messages,
+        )
+        reply = completion.choices[0].message.content
+        return {"reply": reply or "I could not generate a response. Please try again."}
+    except Exception as exc:
+        raise HTTPException(500, f"OpenAI coach request failed: {type(exc).__name__}: {exc}") from exc
+
 
 def _owned_analysis(analysis_id, db, user):
     row=db.get(Analysis,analysis_id)

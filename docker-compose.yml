@@ -7,15 +7,20 @@ services:
       POSTGRES_PASSWORD: resume
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U resume -d resume_verifier"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 5s
     ports: ["5432:5432"]
   backend:
     build: ./backend
     environment:
-      DATABASE_URL: postgresql+psycopg://resume:resume@db:5432/resume_verifier
+      DATABASE_URL: sqlite:///./resume_verifier.db
       CORS_ORIGINS: http://localhost:3000
       AUTH_SECRET: local-dev-secret-change-me
     ports: ["8000:8000"]
-    depends_on: [db]
   frontend:
     build: ./frontend
     environment:

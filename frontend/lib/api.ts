@@ -31,6 +31,9 @@ export async function analyze(resumeId:number,jobId?:number){const q=jobId?`?tar
 export async function getHistory(){return request('/api/analyses')}
 export async function getAnalysis(id:string|number){return request(`/api/analyses/${id}`)}
 export async function chatWithAnalysis(id:string|number,message:string){return request(`/api/analyses/${id}/chat`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message})})}
+export async function chatWithCoach(payload:{messages:Array<{role:'user'|'assistant'|'system',content:string}>, resume_context?:string, job_context?:string}){
+  return request('/api/coach/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
+}
 export async function rewriteAnalysis(id:string|number,tone='confident'){return request(`/api/analyses/${id}/rewrite`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tone})})}
 export async function downloadReport(id:string|number,format:'docx'|'pdf'){const t=token();const r=await fetch(`${API}/api/analyses/${id}/report.${format}`,{headers:t?{Authorization:`Bearer ${t}`}:{}});if(!r.ok)throw new Error(await r.text());const blob=await r.blob();const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`resume-analysis-${id}.${format}`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
 export function saveSession(data:any,remember=false){logout();const store=remember?localStorage:sessionStorage;store.setItem('rv_token',data.access_token);store.setItem('rv_user',JSON.stringify(data.user))}

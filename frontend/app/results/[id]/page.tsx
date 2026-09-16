@@ -3,7 +3,8 @@ import {useEffect,useState} from 'react';
 import {useParams} from 'next/navigation';
 import Link from 'next/link';
 import AppShell from '../../../components/AppShell';
-import {getAnalysis, chatWithAnalysis, rewriteAnalysis, downloadReport} from '../../../lib/api';
+import ResumeCoach from '../../../components/ResumeCoach';
+import {getAnalysis, rewriteAnalysis, downloadReport} from '../../../lib/api';
 
 export default function Results(){
   const {id} = useParams();
@@ -28,12 +29,6 @@ export default function Results(){
   useEffect(() => {
     if (id) setRewrite(localStorage.getItem(`rv_resume_draft_${id}`) || '');
   }, [id]);
-
-  async function askCoach() {
-    if (!id) return;
-    const response = await chatWithAnalysis(String(id), draft || 'What is the biggest problem with my resume?');
-    setChat(response);
-  }
 
   async function generateRewrite() {
     if (!id) return;
@@ -139,22 +134,10 @@ export default function Results(){
     </section>}
 
     <section className="panel checklist">
-      <h3>Resume Coach</h3>
-      <p className="muted">The resume is close, but the biggest issue is likely the gap between your current experience and the required role skills.</p>
-
-      <div className="chatBox">
-        <textarea value={draft} onChange={e => setDraft(e.target.value)} rows={3} />
-        <button className="primary" onClick={askCoach}>Ask coach</button>
-      </div>
-
-      {chat && <div className="coachOutput">
-        <p><strong>Issue:</strong> {chat.issue || chat.issues?.[0]}</p>
-        <ul>
-          {(chat.recommendations || chat.suggestions || []).slice(0, 5).map((item: string, index: number) => (
-            <li key={index}>{item}</li>
-          ))}
-        </ul>
-      </div>}
+      <ResumeCoach
+        resumeContext={r.resume_filename ? `Resume: ${r.resume_filename}` : ''}
+        jobContext={r.target_title ? `${r.target_title}${r.target_company ? ` at ${r.target_company}` : ''}` : ''}
+      />
 
       <div className="rewriteBox">
         <div className="rewriteHeader">

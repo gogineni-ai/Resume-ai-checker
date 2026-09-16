@@ -105,3 +105,76 @@ def test_chat_and_rewrite_are_grounded_in_analysis_data():
     text = rewrite.json()["full_resume"]
     assert "Python" in text or "python" in text
     assert "Kubernetes" in text or "kubernetes" in text
+
+
+def test_coach_chat_preserves_multi_turn_history(monkeypatch):
+    from app.config import settings
+
+    class FakeMessage:
+        def __init__(self, content):
+            self.content = content
+
+    class FakeChoice:
+        def __init__(self, content):
+            self.message = FakeMessage(content)
+
+    class FakeCompletions:
+        def __init__(self):
+            self.calls = []
+        def create(self, **kwargs):
+            self.calls.append(kwargs)
+            return type("Response", (), {"choices": [FakeChoice("Here is your tailored advice.")]})()
+
+    fake_client = type("FakeOpenAI", (), {"chat": type("Chat", (), {"completions": FakeCompletions()})})()
+
+    import openai
+    monkeypatch.setattr(openai, "OpenAI", lambda api_key=None: fake_client)
+    original_value = settings.openai_api_key
+    settings.openai_api_key = "test-key"
+
+    try:
+        email = f"coach2-{uuid.uuid4().hex[:8]}@example.com"
+        register = client.post(
+            "/api/auth/register",
+            json={
+                "name": "Coach Two",
+                "email": email,
+                "phone": f"555-{uuid.uuid4().hex[:6]}",
+                "date_of_birth": None,
+                "password": "securepass123",
+            },
+        )
+        assert register.status_code == 200, register.text
+        token = register.json()["access_token"]
+        headers = {"Authorization": f"Bearer {token}"}
+
+        from app.db import SessionLocal
+        from app.models.entities import User
+        with SessionLocal() as db:
+            db.scalar(select(User).where(User.email == email)).email_verified = True
+            db.commit()
+
+        response = client.post(
+            "/api/coach/chat",
+            json={
+                "messages": [
+                    {"role": "user", "content": "What gaps should I fix?"},
+                    {"role": "assistant", "content": "Start by targeting the missing cloud skills."},
+                    {"role": "user", "content": "Can you make that more specific?"},
+                ],
+                "resume_context": "Python developer with SQL, AWS, and FastAPI.",
+                "job_context": "Senior Python Engineer role with Kubernetes, Terraform, and distributed systems.",
+            },
+            headers=headers,
+        )
+        assert response.status_code == 200, response.text
+        payload = response.json()
+        assert "reply" in payload
+        assert payload["reply"]
+        assert fake_client.chat.completions.calls
+        first_call = fake_client.chat.completions.calls[0]
+        assert any(message["role"] == "system" and "expert career and resume coach" in message["content"].lower() for message in first_call["messages"])
+        assert any(message["role"] == "system" and "Resume context" in message["content"] for message in first_call["messages"])
+        assert any(message["role"] == "user" and "Can you make that more specific?" == message["content"] for message in first_call["messages"])
+    finally:
+        settings.openai_api_key = original_value
