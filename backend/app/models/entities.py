@@ -11,6 +11,7 @@ class User(Base):
     date_of_birth = Column(Date, nullable=True)
     email_verified = Column(Boolean, nullable=False, default=False)
     phone_verified = Column(Boolean, nullable=False, default=False)
+    session_version = Column(Integer, nullable=False, default=0, server_default="0")
     password_hash = Column(Text, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
@@ -22,6 +23,7 @@ class VerificationCode(Base):
     destination = Column(String(255), nullable=False)
     code_hash = Column(String(255), nullable=False)
     expires_at = Column(DateTime(timezone=True), nullable=False)
+    attempts = Column(Integer, nullable=False, default=0, server_default="0")
     used_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
@@ -55,8 +57,8 @@ class Analysis(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     resume_id = Column(Integer, ForeignKey("resumes.id"), nullable=False)
     target_job_id = Column(Integer, ForeignKey("job_postings.id"), nullable=True)
-    overall_score = Column(Float, nullable=False)
-    ats_score = Column(Float, nullable=False)
+    overall_score = Column(Float, nullable=True)
+    ats_score = Column(Float, nullable=True)
     evidence_score = Column(Float, nullable=False)
     timeline_score = Column(Float, nullable=False)
     result = Column(JSON, nullable=False)

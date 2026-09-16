@@ -10,3 +10,5 @@ node_modules/
 *.bak
 *.save
 .DS_Store
+*.tsbuildinfo
+backend/sources.json

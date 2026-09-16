@@ -1,6 +1,7 @@
 import csv
 import uuid
 from pathlib import Path
+from sqlalchemy import select
 
 from fastapi.testclient import TestClient
 from app.main import app
@@ -48,6 +49,11 @@ def test_chat_and_rewrite_are_grounded_in_analysis_data():
     assert register.status_code == 200, register.text
     token = register.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
+    from app.db import SessionLocal
+    from app.models.entities import User
+    with SessionLocal() as db:
+        db.scalar(select(User).where(User.email == email)).email_verified = True
+        db.commit()
 
     resume_text = """
     Python developer with 4 years of software engineering experience.

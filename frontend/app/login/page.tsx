@@ -7,12 +7,12 @@ import {API,login,saveSession} from '../../lib/api'
 
 export default function Login(){
   const r=useRouter();
-  const [email,setEmail]=useState(''),[password,setPassword]=useState(''),[err,setErr]=useState(''),[busy,setBusy]=useState(false)
+  const [email,setEmail]=useState(''),[password,setPassword]=useState(''),[err,setErr]=useState(''),[busy,setBusy]=useState(false),[remember,setRemember]=useState(false)
 
   async function submit(e:any){
     e.preventDefault();
     setBusy(true);setErr('');
-    try{const d=await login({email,password});saveSession(d);r.push('/dashboard')}
+    try{const d=await login({email,password});saveSession(d,remember);r.push(d.user.email_verified?'/dashboard':'/verify-email')}
     catch(x:any){setErr(x.message)}
     finally{setBusy(false)}
   }

@@ -3,7 +3,7 @@ import {useEffect,useState} from 'react';
 import {useParams} from 'next/navigation';
 import Link from 'next/link';
 import AppShell from '../../../components/AppShell';
-import {getAnalysis, chatWithAnalysis, rewriteAnalysis} from '../../../lib/api';
+import {getAnalysis, chatWithAnalysis, rewriteAnalysis, downloadReport} from '../../../lib/api';
 
 export default function Results(){
   const {id} = useParams();
@@ -59,6 +59,18 @@ export default function Results(){
     URL.revokeObjectURL(url);
   }
 
+  async function downloadReportFile(format: 'docx' | 'pdf') {
+    try { await downloadReport(String(id), format); setSaveState(`${format.toUpperCase()} report downloaded`); }
+    catch (error: any) { setSaveState(error.message || 'Unable to download report'); }
+  }
+
+  function shareReport() {
+    navigator.clipboard?.writeText(window.location.href).then(
+      () => setSaveState('Private report link copied'),
+      () => setSaveState('Unable to copy the report link'),
+    );
+  }
+
   if (!r) {
     return <AppShell><div className="pageLoader"><div className="spinner"/>Loading analysis…</div></AppShell>;
   }
@@ -73,8 +85,9 @@ export default function Results(){
         <h1>Analysis Results</h1>
       </div>
       <div className="actions">
-        <button className="outline">⇩ Download Report</button>
-        <button className="outline">↗ Share</button>
+        <button className="outline" onClick={() => downloadReportFile('docx')}>⇩ Word</button>
+        <button className="outline" onClick={() => downloadReportFile('pdf')}>⇩ PDF</button>
+        <button className="outline" onClick={shareReport}>↗ Share</button>
       </div>
     </div>
 
@@ -106,6 +119,8 @@ export default function Results(){
       <SkillBox title={`Missing Skills (${r.missing_skills?.length || 0})`} items={r.missing_skills} kind="miss" />
       <SkillBox title="Evidence Summary" items={(r.skills || []).slice(0, 7).map((s: any) => `${s.skill} — ${s.status}`)} kind="info" />
     </div>
+
+    <JobComparison result={r} />
 
     {ai && <section className="panel aiInsights">
       <div className="aiHeader">
@@ -170,4 +185,15 @@ function SkillBox({ title, items = [], kind }: { title: string; items?: string[]
 
 function InsightList({ title, items = [] }: { title: string; items?: string[] }) {
   return <div><b>{title}</b>{items.length ? <ul>{items.slice(0, 5).map((item: string, index: number) => <li key={index}>{item}</li>)}</ul> : <p className="muted">None reported.</p>}</div>;
+}
+
+function JobComparison({ result }: { result: any }) {
+  if (!result.target_job_id) return null;
+  return <section className="panel" style={{ padding: 24, marginTop: 24 }}>
+    <h2>Resume vs. Job Description</h2>
+    <p>Estimated match based on recognized skills and shared wording. This is not an employer ATS score or hiring prediction.</p>
+    {result.requirements?.length ? <div style={{ overflowX: 'auto' }}><table style={{ width: '100%', textAlign: 'left' }}><thead><tr><th>Skill</th><th>Match</th><th>Job description</th><th>Resume evidence</th></tr></thead><tbody>{result.requirements.map((item: any) => <tr key={item.skill}><td>{item.skill}</td><td>{item.status === 'found' ? 'Found' : 'Not found'}</td><td style={{ padding: 12, whiteSpace: 'pre-wrap' }}>{item.job_excerpt}</td><td style={{ padding: 12, whiteSpace: 'pre-wrap' }}>{item.resume_excerpt || 'No mention found; this does not establish a lack of experience.'}</td></tr>)}</tbody></table></div> : <p>No detailed comparison is available. Run a new analysis with a job description.</p>}
+    {result.suggestions?.length > 0 && <><h3>Ways to improve your resume</h3><ul>{result.suggestions.map((suggestion: string, index: number) => <li key={index}>{suggestion}</li>)}</ul></>}
+    {result.job_description && <details><summary>Compared job description</summary><p style={{ whiteSpace: 'pre-wrap' }}>{result.job_description}</p></details>}
+  </section>;
 }

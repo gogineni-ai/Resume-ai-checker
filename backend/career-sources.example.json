@@ -1,0 +1,7 @@
+{
+  "sources": [
+    {"source":"career_html","company":"Google","urls":["https://www.google.com/about/careers/applications/jobs/results/"],"max_pages":30},
+    {"source":"career_html","company":"Oracle","urls":["https://www.oracle.com/careers/"],"max_pages":30},
+    {"source":"career_html","company":"Tata Consultancy Services","urls":["https://www.tcs.com/careers"],"max_pages":30}
+  ]
+}

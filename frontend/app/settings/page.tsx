@@ -3,6 +3,7 @@
 import {useState} from 'react'
 import AppShell from '../../components/AppShell'
 import {
+  logout,
   changePassword,
   getStoredUser,
   setStoredUser,
@@ -57,7 +58,7 @@ export default function Settings(){
       setCurrentPassword('')
       setNewPassword('')
       setConfirmPassword('')
-      setMessage('Password updated successfully.')
+      logout();window.location.assign('/login')
     }catch(e:any){
       setError(e.message||'Unable to update password')
     }finally{

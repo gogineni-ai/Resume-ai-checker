@@ -1,4 +1,5 @@
 'use client'
+import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import AppShell from '../../components/AppShell';
@@ -28,6 +29,10 @@ export default function Dashboard() {
   async function file(e: any) {
     const f = e.target.files?.[0];
     if (!f) return;
+    if (!/\.(pdf|docx|txt)$/i.test(f.name) || f.size > 10 * 1024 * 1024) {
+      setErr('Choose a PDF, DOCX or TXT file up to 10MB.');
+      return;
+    }
     setBusy(true);
     setErr('');
     try {
@@ -96,13 +101,13 @@ export default function Dashboard() {
       </section>
 
       <div className="quickGrid">
-        <div className="quick blue"><i>▤</i><b>Analyze Resume</b><span>Get detailed AI analysis</span></div>
-        <div className="quick mint"><i>⌁</i><b>Job Match</b><span>Compare with job description</span></div>
-        <div className="quick purple"><i>◉</i><b>Verify Experience</b><span>Check company tech data</span></div>
-        <div className="quick orange"><i>▣</i><b>Track Progress</b><span>View your analysis history</span></div>
+        <Link href="#upload" className="quick blue"><i>▤</i><b>Analyze Resume</b><span>Get detailed AI analysis</span></Link>
+        <Link href="#job-description" className="quick mint"><i>⌁</i><b>Job Match</b><span>Compare with job description</span></Link>
+        <Link href="/verification" className="quick purple"><i>◉</i><b>Verify Experience</b><span>Check company tech data</span></Link>
+        <Link href="/history" className="quick orange"><i>▣</i><b>Track Progress</b><span>View your analysis history</span></Link>
       </div>
 
-      <section className="panel uploadPanel">
+      <section id="upload" className="panel uploadPanel">
         <div className="drop">
           <div className="cloud">⇧</div>
           <h2>{resume ? resume.filename : 'Upload Your Resume'}</h2>
@@ -144,6 +149,8 @@ export default function Dashboard() {
           <div className="orText">or paste a job description</div>
           <div className="analyzeRow">
             <textarea
+              id="job-description"
+              aria-label="Job description"
               value={jd}
               onChange={e => setJd(e.target.value)}
               placeholder="Paste job description here…"

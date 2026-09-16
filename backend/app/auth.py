@@ -28,8 +28,8 @@ def _b64(data: bytes) -> str:
 def _unb64(data: str) -> bytes:
     return base64.urlsafe_b64decode(data + "=" * (-len(data) % 4))
 
-def create_token(user_id: int, ttl: int = 60 * 60 * 24 * 7) -> str:
-    payload = _b64(json.dumps({"sub": user_id, "exp": int(time.time()) + ttl}, separators=(",", ":")).encode())
+def create_token(user_id: int, ttl: int = 60 * 60 * 24 * 7, version: int = 0) -> str:
+    payload = _b64(json.dumps({"sub": user_id, "version": version, "exp": int(time.time()) + ttl}, separators=(",", ":")).encode())
     sig = _b64(hmac.new(SECRET.encode(), payload.encode(), hashlib.sha256).digest())
     return payload + "." + sig
 
@@ -50,4 +50,6 @@ def current_user(authorization: str | None = Header(default=None), db: Session =
     uid = decode_token(authorization.split(" ", 1)[1])
     user = db.get(User, uid)
     if not user: raise HTTPException(401, "User no longer exists")
+    payload = json.loads(_unb64(authorization.split(" ",1)[1].split(".",1)[0]))
+    if payload.get("version",0) != user.session_version: raise HTTPException(401, "Please sign in again")
     return user
