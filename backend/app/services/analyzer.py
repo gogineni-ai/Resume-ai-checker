@@ -30,7 +30,19 @@ def compare_resume_to_job(resume_text: str, job_text: str) -> dict:
     skill_score = 100 * len(matched) / len(jskills) if jskills else None
     sim = 100 * text_similarity(resume_text, job_text)
     ats = round(0.7 * skill_score + 0.3 * sim, 1) if skill_score is not None else None
+    resume_lines = [line.strip() for line in resume_text.splitlines() if line.strip()]
+    requirements = []
+    for skill in sorted(jskills):
+        job_lines = [line.strip() for line in job_text.splitlines() if skill in extract_skills(line)]
+        supporting = [line for line in resume_lines if skill in extract_skills(line)]
+        requirements.append({"skill": skill, "status": "found" if skill in rskills else "not found",
+                             "job_excerpt": (job_lines[0] if job_lines else job_text)[:500],
+                             "resume_excerpt": supporting[0][:500] if supporting else None})
+    suggestions = (["If you have experience with " + ', '.join(missing) + ", add concrete examples of that work. Do not add skills you have not used."] if missing else [])
+    suggestions.append("Describe relevant projects, responsibilities, and measurable outcomes; keyword matches alone do not establish qualification.")
     return {"ats_score": ats, "skill_match_score": skill_score,
+            "job_description": job_text, "requirements": requirements, "suggestions": suggestions,
+            "score_breakdown": {"skill_coverage_weight": 0.7, "shared_wording_weight": 0.3},
             "match_assessed": ats is not None,
             "match_note": 'Heuristic: 70% recognized skill coverage and 30% shared wording. Does not assess proficiency, seniority, or required versus preferred qualifications.' if jskills else 'Not assessed: no recognized job skills. Add specific technology requirements or review the job manually.',
             "matched_skills": matched, "missing_skills": missing,
