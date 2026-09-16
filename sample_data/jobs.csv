@@ -1,3 +1,16 @@
 company,title,location,posted_at,description,source_url
 ExampleCo,Senior Python Developer,Dallas TX,2024-02-01,"Python FastAPI PostgreSQL Docker Kubernetes AWS REST APIs",https://example.com/job/1
 ExampleCo,Frontend Engineer,Austin TX,2023-06-15,"React TypeScript Next.js GitHub Actions",https://example.com/job/2
+Stripe,Full Stack Engineer,Remote,2024-08-10,"JavaScript TypeScript React Node.js GraphQL PostgreSQL AWS",https://example.com/job/3
+Airbnb,Platform Engineer,San Francisco CA,2023-11-02,"Python Go Kubernetes Docker Terraform AWS GCP",https://example.com/job/4
+Shopify,Senior Frontend Engineer,Remote,2022-09-18,"JavaScript React TypeScript Next.js GraphQL Node.js",https://example.com/job/5
+Netflix,Data Engineer,Los Gatos CA,2024-04-22,"Python SQL Spark Kafka AWS Airflow",https://example.com/job/6
+Uber,Machine Learning Engineer,New York NY,2023-05-09,"Python TensorFlow PyTorch SQL Kubernetes AWS Docker",https://example.com/job/7
+GitLab,DevOps Engineer,Remote,2021-07-14,"Docker Kubernetes Terraform Linux Bash AWS GitHub Actions",https://example.com/job/8
+Atlassian,Software Engineer,Remote,2022-03-03,"JavaScript TypeScript React Node.js Java AWS GraphQL",https://example.com/job/9
+Databricks,Data Platform Engineer,Remote,2024-01-17,"Python Spark SQL Kubernetes Docker AWS Azure",https://example.com/job/10
+Red Hat,Cloud Engineer,Boston MA,2020-12-01,"Linux Docker Kubernetes Terraform Ansible AWS Azure",https://example.com/job/11
+Microsoft,Senior Product Engineer,Seattle WA,2023-08-11,"C# .NET Azure SQL React TypeScript JavaScript",https://example.com/job/12
+Google,Backend Engineer,New York NY,2022-10-04,"Java Python Kubernetes GCP SQL Microservices REST APIs",https://example.com/job/13
+Meta,Full Stack Engineer,Menlo Park CA,2024-06-26,"JavaScript TypeScript React Node.js GraphQL SQL",https://example.com/job/14
+Salesforce,Platform Engineer,Remote,2021-02-13,"Python JavaScript AWS Docker Kubernetes Terraform GitHub Actions",https://example.com/job/15

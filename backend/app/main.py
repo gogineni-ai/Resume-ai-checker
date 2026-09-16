@@ -1,17 +1,21 @@
 from fastapi import FastAPI, UploadFile, File, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, EmailStr
 from datetime import date, datetime, timedelta, timezone
 from sqlalchemy.orm import Session
 from sqlalchemy import select, text
+from typing import Any
 import threading
 import secrets
 import hashlib
+import httpx
+from urllib.parse import urlencode, quote
 from .db import Base, engine, get_db
 from .models.entities import User, Resume, JobPosting, Analysis, VerificationCode
 from .services.parser import extract_text, parse_resume
 from .services.analyzer import compare_resume_to_job, analyze_evidence
-from .services.ingest import greenhouse_jobs, lever_jobs
+from .services.ingest import greenhouse_jobs, lever_jobs, parse_refresh_sources, refresh_job_sources
 from .services.taxonomy import extract_skills
 from .services.email_service import send_otp_email
 from .services.ai_pipeline import generate_ai_insights
@@ -21,37 +25,136 @@ from .auth import hash_password, verify_password, create_token, current_user
 app = FastAPI(title="Resume Verifier AI", version="1.0.0")
 app.add_middleware(CORSMiddleware, allow_origins=[x.strip() for x in settings.cors_origins.split(",")], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
+
+def _database_column_exists(conn, table_name: str, column_name: str) -> bool:
+    rows = conn.execute(text(f"PRAGMA table_info({table_name})")).fetchall()
+    return any(row[1] == column_name for row in rows)
+
+
+def ensure_database_schema() -> None:
+    Base.metadata.create_all(bind=engine)
+    with engine.begin() as conn:
+        if not _database_column_exists(conn, "users", "date_of_birth"):
+            conn.execute(text("ALTER TABLE users ADD COLUMN date_of_birth DATE"))
+        if not _database_column_exists(conn, "users", "email_verified"):
+            conn.execute(text("ALTER TABLE users ADD COLUMN email_verified BOOLEAN NOT NULL DEFAULT FALSE"))
+        if not _database_column_exists(conn, "users", "phone_verified"):
+            conn.execute(text("ALTER TABLE users ADD COLUMN phone_verified BOOLEAN NOT NULL DEFAULT FALSE"))
+
+        try:
+            conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ux_users_phone ON users(phone) WHERE phone IS NOT NULL"))
+        except Exception as index_exc:
+            print(f"Phone unique index skipped: {index_exc}")
+
+
+ensure_database_schema()
+
+_refresh_task = None
+
+
+def _analysis_summary(result: dict[str, Any]) -> tuple[str, list[str]]:
+    missing = [x for x in (result.get("missing_skills") or []) if isinstance(x, str)]
+    if missing:
+        issue = f"Your resume is missing the strongest role-fit skills: {', '.join(missing[:5])}."
+        recommendations = [
+            *[f"Add evidence for {skill} in your experience bullets." for skill in missing[:3]],
+            "Quantify the impact of your work with metrics and business outcomes.",
+            "Add a short project section that mirrors the target job's responsibilities.",
+        ]
+        return issue, recommendations
+
+    evidence_score = float(result.get("evidence_score") or 0)
+    ats_score = float(result.get("ats_score") or 0)
+    if evidence_score < 70 or ats_score < 70:
+        issue = "The resume is directionally relevant, but the evidence is not strong enough for the target role."
+        recommendations = [
+            "Tighten the experience section around the target role's core responsibilities.",
+            "Replace generic verbs with metrics and technologies from the job description.",
+            "Highlight the stack, impact, and ownership in the top three role bullets.",
+        ]
+        return issue, recommendations
+
+    issue = "The resume is close to the target, but a few details still need to be sharpened for stronger ATS and recruiter fit."
+    recommendations = [
+        "Trim generic statements and keep only the most relevant wins near the top.",
+        "Align your summary with the specific job title and mission.",
+        "Add one explicit proof point for each key competency in the role description.",
+    ]
+    return issue, recommendations
+
+
+def _build_resume_rewrite(resume_text: str, result: dict[str, Any], target_job: JobPosting | None, tone: str = "confident") -> str:
+    skills = [s for s in (result.get("matched_skills") or []) if isinstance(s, str)]
+    missing = [s for s in (result.get("missing_skills") or []) if isinstance(s, str)]
+    target_skills = []
+    if target_job:
+        target_skills.extend([s for s in (target_job.skills or []) if isinstance(s, str)])
+        target_skills.extend(extract_skills(target_job.description))
+
+    highlight_skills = sorted({*(skills or extract_skills(resume_text)), *(target_skills[:8]), *(missing[:4])})
+    tone_label = (tone or "confident").strip().lower() or "confident"
+    if tone_label not in {"confident", "professional", "leadership", "friendly"}:
+        tone_label = "confident"
+
+    summary = (
+        "Software engineer with experience building production services, data pipelines, and customer-focused tools. "
+        "Strong background in Python, backend architecture, and shipping scalable, reliable systems with measurable business impact."
+    )
+    if target_job:
+        summary = f"{target_job.title} candidate with experience across backend systems, product delivery, and cross-functional engineering. Skilled in building resilient services, improving workflows, and aligning technical execution with business outcomes."
+
+    skill_line = ", ".join(highlight_skills[:12]) if highlight_skills else "Python, SQL, cloud platforms, backend engineering"
+    story = [
+        "Professional Summary",
+        summary,
+        "",
+        "Core Skills",
+        f"{skill_line}",
+        "",
+        "Experience",
+        "- Built and maintained backend systems using Python, REST APIs, and cloud-native tooling to improve service reliability and delivery speed.",
+        "- Partnered with product and engineering teams to translate business requirements into scalable, maintainable software solutions.",
+        "- Improved operational efficiency through automation, observability, and streamlined development workflows.",
+        "",
+        "Selected Achievements",
+        "- Delivered production features that increased developer velocity and reduced manual operational work.",
+        "- Built resilient data and API workflows that improved quality, scalability, and time-to-value for end users.",
+        "- Supported cross-functional delivery by documenting requirements, validating technical tradeoffs, and driving execution.",
+        "",
+        "Additional Expertise",
+        f"- Relevant stack for the role includes {skill_line}.",
+        f"- Targeted focus: {', '.join(missing[:5]) if missing else 'stronger alignment with role-specific responsibilities'}.",
+    ]
+    return "\n".join(story)
+
+
 @app.on_event("startup")
 def initialize_database():
-    def create_tables():
-        try:
-            Base.metadata.create_all(bind=engine)
+    try:
+        ensure_database_schema()
+        print("Database tables initialized")
+    except Exception as exc:
+        print(f"Database initialization failed: {exc}")
 
-            if engine.dialect.name == "postgresql":
-                with engine.begin() as conn:
-                    conn.execute(text(
-                        "ALTER TABLE users ADD COLUMN IF NOT EXISTS date_of_birth DATE"
-                    ))
-                    conn.execute(text(
-                        "ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN NOT NULL DEFAULT FALSE"
-                    ))
-                    conn.execute(text(
-                        "ALTER TABLE users ADD COLUMN IF NOT EXISTS phone_verified BOOLEAN NOT NULL DEFAULT FALSE"
-                    ))
-
-                try:
-                    with engine.begin() as conn:
-                        conn.execute(text(
-                            "CREATE UNIQUE INDEX IF NOT EXISTS ux_users_phone "
-                            "ON users(phone) WHERE phone IS NOT NULL"
-                        ))
-                except Exception as index_exc:
-                    print(f"Phone unique index skipped: {index_exc}")
-
-            print("Database tables initialized")
-        except Exception as exc:
-            print(f"Database initialization failed: {exc}")
-    threading.Thread(target=create_tables, daemon=True).start()
+    if settings.auto_refresh_enabled:
+        sources = parse_refresh_sources(settings.auto_refresh_sources)
+        if sources:
+            def refresh_loop():
+                import asyncio
+                async def runner():
+                    while True:
+                        try:
+                            db = next(get_db())
+                            task_result = await refresh_job_sources(db, sources)
+                            print(f"Auto-refresh complete: {task_result}")
+                            db.close()
+                        except Exception as exc:
+                            print(f"Auto-refresh failed: {exc}")
+                        await asyncio.sleep(max(settings.auto_refresh_interval_minutes, 1) * 60)
+                asyncio.run(runner())
+            global _refresh_task
+            _refresh_task = threading.Thread(target=refresh_loop, daemon=True)
+            _refresh_task.start()
 
 class RegisterIn(BaseModel):
     name: str
@@ -93,6 +196,15 @@ class JobIn(BaseModel):
     location: str | None = None
     source_url: str | None = None
     posted_at: str | None = None
+
+
+class ChatMessageIn(BaseModel):
+    message: str
+
+
+class RewriteIn(BaseModel):
+    tone: str | None = "confident"
+    custom_prompt: str | None = None
 
 def public_user(u: User): return {"id":u.id,"name":u.name,"email":u.email,"phone":u.phone,"date_of_birth":u.date_of_birth,"email_verified":u.email_verified,"phone_verified":u.phone_verified}
 
@@ -164,6 +276,100 @@ def login(body: LoginIn, db: Session = Depends(get_db)):
     u = db.scalar(select(User).where(User.email == body.email.lower().strip()))
     if not u or not verify_password(body.password, u.password_hash): raise HTTPException(401, "Invalid email or password")
     return {"access_token": create_token(u.id), "user": public_user(u)}
+
+
+def _social_provider_settings(provider: str):
+    p = provider.lower()
+    if p == "google":
+        return {
+            "client_id": settings.google_client_id,
+            "client_secret": settings.google_client_secret,
+            "redirect_uri": settings.google_redirect_uri,
+            "auth_url": "https://accounts.google.com/o/oauth2/v2/auth",
+            "token_url": "https://oauth2.googleapis.com/token",
+            "user_url": "https://openidconnect.googleapis.com/v1/userinfo",
+            "scope": "openid email profile",
+            "extra": {"access_type": "offline", "prompt": "consent"},
+        }
+    if p == "microsoft":
+        return {
+            "client_id": settings.microsoft_client_id,
+            "client_secret": settings.microsoft_client_secret,
+            "redirect_uri": settings.microsoft_redirect_uri,
+            "auth_url": "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
+            "token_url": "https://login.microsoftonline.com/common/oauth2/v2.0/token",
+            "user_url": "https://graph.microsoft.com/oidc/userinfo",
+            "scope": "openid profile email User.Read",
+            "extra": {},
+        }
+    raise HTTPException(404, "Unsupported provider")
+
+
+@app.get("/api/auth/social/{provider}/start")
+def social_login_start(provider: str):
+    cfg = _social_provider_settings(provider)
+    if not cfg["client_id"] or not cfg["client_secret"]:
+        raise HTTPException(400, f"{provider.title()} OAuth is not configured")
+    params = {
+        "client_id": cfg["client_id"],
+        "redirect_uri": cfg["redirect_uri"],
+        "response_type": "code",
+        "scope": cfg["scope"],
+        **cfg["extra"],
+    }
+    return {"auth_url": f"{cfg['auth_url']}?{urlencode(params)}"}
+
+
+@app.get("/api/auth/social/{provider}/callback")
+async def social_login_callback(provider: str, code: str | None = None, db: Session = Depends(get_db)):
+    if not code:
+        raise HTTPException(400, "Missing OAuth code")
+    cfg = _social_provider_settings(provider)
+    if not cfg["client_id"] or not cfg["client_secret"]:
+        raise HTTPException(400, f"{provider.title()} OAuth is not configured")
+
+    token_payload = {
+        "code": code,
+        "client_id": cfg["client_id"],
+        "client_secret": cfg["client_secret"],
+        "redirect_uri": cfg["redirect_uri"],
+        "grant_type": "authorization_code",
+    }
+    async with httpx.AsyncClient(timeout=30) as client:
+        token_res = await client.post(cfg["token_url"], data=token_payload)
+        token_res.raise_for_status()
+        token_data = token_res.json()
+        access_token = token_data.get("access_token")
+        if not access_token:
+            raise HTTPException(400, "Unable to exchange OAuth code")
+
+        user_res = await client.get(cfg["user_url"], headers={"Authorization": f"Bearer {access_token}"})
+        user_res.raise_for_status()
+        user_info = user_res.json()
+
+    email = (user_info.get("email") or user_info.get("preferred_username") or "").strip().lower()
+    if not email:
+        raise HTTPException(400, "OAuth account did not return an email")
+
+    user = db.scalar(select(User).where(User.email == email))
+    if not user:
+        user = User(
+            name=(user_info.get("name") or email.split("@")[0]).strip() or "OAuth User",
+            email=email,
+            phone=None,
+            password_hash=hash_password(secrets.token_urlsafe(32)),
+            email_verified=True,
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+
+    token = create_token(user.id)
+    name = quote(user.name)
+    email_q = quote(user.email)
+    redirect = f"{settings.frontend_url}/login?auth_success=1&token={token}&name={name}&email={email_q}"
+    return RedirectResponse(redirect, status_code=307)
+
 
 @app.get("/api/auth/me")
 def me(user: User = Depends(current_user)): return public_user(user)
@@ -255,6 +461,16 @@ async def import_lever(site: str, db: Session = Depends(get_db), user: User = De
         if not exists: db.add(JobPosting(**row)); count += 1
     db.commit(); return {"imported": count, "seen": len(jobs)}
 
+
+@app.post("/api/jobs/refresh")
+async def refresh_jobs(db: Session = Depends(get_db), user: User = Depends(current_user)):
+    sources = parse_refresh_sources(settings.auto_refresh_sources)
+    if not sources:
+        raise HTTPException(400, "No auto-refresh sources configured")
+    result = await refresh_job_sources(db, sources)
+    return result
+
+
 @app.get("/api/jobs")
 def list_jobs(limit: int = 50, db: Session = Depends(get_db), user: User = Depends(current_user)):
     jobs = db.scalars(select(JobPosting).order_by(JobPosting.id.desc()).limit(min(limit,200))).all()
@@ -289,3 +505,53 @@ def analysis_detail(analysis_id: int, db: Session = Depends(get_db), user: User 
     row = db.get(Analysis, analysis_id)
     if not row or row.user_id != user.id: raise HTTPException(404, "Analysis not found")
     return {"id":row.id,"created_at":row.created_at,"result":row.result}
+
+
+@app.post("/api/analyses/{analysis_id}/chat")
+def analysis_chat(analysis_id: int, body: ChatMessageIn, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    row = db.get(Analysis, analysis_id)
+    if not row or row.user_id != user.id:
+        raise HTTPException(404, "Analysis not found")
+
+    issue, recommendations = _analysis_summary(row.result or {})
+    summary = (
+        f"The main issue is that your resume is not yet aligned to the target role: {issue} "
+        "Use the recommended edits below to strengthen the match and improve ATS readability."
+    )
+    user_message = (body.message or "").strip()
+    if user_message:
+        lower_msg = user_message.lower()
+        if "missing" in lower_msg or "problem" in lower_msg or "issue" in lower_msg:
+            summary = issue
+        elif "how" in lower_msg and "improve" in lower_msg:
+            summary = "Focus first on the missing skills and rewrite the top experience bullets to mirror the target job's responsibilities."
+
+    return {
+        "issues": [issue],
+        "issue": issue,
+        "summary": summary,
+        "recommendations": recommendations,
+        "suggestions": recommendations,
+    }
+
+
+@app.post("/api/analyses/{analysis_id}/rewrite")
+def analysis_rewrite(analysis_id: int, body: RewriteIn | None = None, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    row = db.get(Analysis, analysis_id)
+    if not row or row.user_id != user.id:
+        raise HTTPException(404, "Analysis not found")
+
+    resume = db.get(Resume, row.resume_id)
+    target = db.get(JobPosting, row.target_job_id) if row.target_job_id else None
+    tone = (body.tone if body else "confident") or "confident"
+    resume_text = resume.raw_text if resume else ""
+    rewritten = _build_resume_rewrite(resume_text, row.result or {}, target, tone)
+    return {
+        "full_resume": rewritten,
+        "highlights": [
+            "Aligned with the target role",
+            "Improved ATS phrasing",
+            "Added measurable impact language",
+        ],
+        "suggested_title": target.title if target else "Relevant Engineering Role",
+    }

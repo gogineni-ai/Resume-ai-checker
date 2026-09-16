@@ -14,8 +14,17 @@ class Settings(BaseSettings):
     vector_db_path: str = "./.chroma"
     ai_top_k: int = 4
 
-    resend_api_key: str = ""
-    otp_from_email: str = "Resume Verifier <onboarding@resend.dev>"
+    frontend_url: str = "http://localhost:3000"
+    google_client_id: str = ""
+    google_client_secret: str = ""
+    google_redirect_uri: str = "http://localhost:8000/api/auth/social/google/callback"
+    microsoft_client_id: str = ""
+    microsoft_client_secret: str = ""
+    microsoft_redirect_uri: str = "http://localhost:8000/api/auth/social/microsoft/callback"
+
+    auto_refresh_enabled: bool = False
+    auto_refresh_sources: str = ""
+    auto_refresh_interval_minutes: int = 60
 
     class Config:
         env_file = ".env"

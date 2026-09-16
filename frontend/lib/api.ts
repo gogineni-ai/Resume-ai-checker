@@ -25,10 +25,13 @@ export async function changePassword(data:{current_password:string,new_password:
 }
 export async function uploadResume(file:File){const f=new FormData();f.append('file',file);return request('/api/resumes',{method:'POST',body:f})}
 export async function getJobs(){return request('/api/jobs')}
+export async function refreshJobs(){return request('/api/jobs/refresh',{method:'POST'})}
 export async function createJob(data:{company:string,title:string,description:string}){return request('/api/jobs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)})}
 export async function analyze(resumeId:number,jobId?:number){const q=jobId?`?target_job_id=${jobId}`:'';return request(`/api/analyze/${resumeId}${q}`,{method:'POST'})}
 export async function getHistory(){return request('/api/analyses')}
 export async function getAnalysis(id:string|number){return request(`/api/analyses/${id}`)}
+export async function chatWithAnalysis(id:string|number,message:string){return request(`/api/analyses/${id}/chat`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message})})}
+export async function rewriteAnalysis(id:string|number,tone='confident'){return request(`/api/analyses/${id}/rewrite`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tone})})}
 export function saveSession(data:any){localStorage.setItem('rv_token',data.access_token);localStorage.setItem('rv_user',JSON.stringify(data.user))}
 export function setStoredUser(user:any){
   localStorage.setItem('rv_user',JSON.stringify(user))
