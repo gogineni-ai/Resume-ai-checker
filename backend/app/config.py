@@ -8,6 +8,12 @@ class Settings(BaseSettings):
     resend_api_key: str = ""
     otp_from_email: str = "Resume Verifier <onboarding@resend.dev>"
 
+    ai_enabled: bool = False
+    openai_api_key: str = ""
+    openai_model: str = "gpt-4o-mini"
+    vector_db_path: str = "./.chroma"
+    ai_top_k: int = 4
+
     resend_api_key: str = ""
     otp_from_email: str = "Resume Verifier <onboarding@resend.dev>"
 

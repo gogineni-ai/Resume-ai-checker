@@ -13,6 +13,7 @@ A GitHub-ready full-stack application that analyzes a resume against a target jo
 - Flag impossible/likely timeline conflicts when a resume appears to claim a technology before its public availability.
 - Keep evidence examples (company, job title, posting year, source URL) for auditability.
 - Avoid declaring a person dishonest: output is `supported`, `plausible`, `weak evidence`, or `timeline conflict`.
+- Optionally enrich each analysis with an LLM review grounded in retrieved job-posting context.
 
 ## Architecture
 
@@ -26,6 +27,22 @@ Resume   Analyzer   Job ingestion
 parser   engine     Greenhouse / Lever / CSV
   \        |        /
         PostgreSQL
+
+    ```
+
+    Optional AI enrichment:
+
+    ```text
+    Resume + target job
+      |
+      v
+    LangGraph workflow: retrieve -> analyze -> validate
+      |                  |
+      v                  v
+    Chroma vector DB       OpenAI-compatible LLM
+      |
+      v
+    Retrieved job context + structured recommendations
 ```
 
 ### Stack
@@ -34,6 +51,7 @@ parser   engine     Greenhouse / Lever / CSV
 - Backend: FastAPI + Python
 - Database: PostgreSQL (SQLite fallback for local backend-only testing)
 - NLP: rule-based technology taxonomy + TF-IDF semantic similarity
+- AI/ML: optional OpenAI-compatible LLM analysis, LangGraph agent workflow, Chroma vector database RAG
 - Ingestion: Greenhouse Job Board API, Lever Postings API, manual/CSV imports
 - Deployment: Docker Compose
 - CI: GitHub Actions
@@ -100,18 +118,38 @@ python scripts/import_csv.py sample_data/jobs.csv
 
 The ATS score combines explicit technology overlap with TF-IDF semantic similarity. This is intentionally transparent. For production, replace/augment it with embeddings and calibrated models, but keep the deterministic evidence fields visible.
 
+## Optional LLM and RAG analysis
+
+The core analyzer is always available offline. AI enrichment is disabled unless explicitly enabled, and failures in the optional pipeline do not fail a resume analysis. When enabled, the service uses LangGraph to coordinate three steps:
+
+1. Retrieve semantically similar archived job postings from Chroma.
+2. Ask an OpenAI-compatible model for a grounded review using only the resume, target job, and retrieved context.
+3. Validate the response into structured `summary`, `strengths`, `gaps`, `recommendations`, and `confidence` fields.
+
+Install the backend dependencies, then configure the service with environment variables:
+
+```bash
+AI_ENABLED=true
+OPENAI_API_KEY=your-key
+OPENAI_MODEL=gpt-4o-mini
+VECTOR_DB_PATH=./.chroma
+AI_TOP_K=4
+```
+
+The result from `POST /api/analyze/{resume_id}` includes an `ai_insights` object with `status`, retrieved job references, and model recommendations. Chroma stores embeddings locally at `VECTOR_DB_PATH`; use a managed vector database or a PostgreSQL/pgvector deployment for production scale. Do not send resumes or job data to an external model without the required user consent, retention controls, and provider agreement.
+
 ## Production roadmap
 
 1. Parse experience into employer/project/date blocks instead of analyzing the resume only as one document.
 2. Associate each claimed skill with the specific job where it is claimed.
 3. Add technology release/version knowledge with citations and version dates.
-4. Add pgvector embeddings for semantic search over millions of job postings.
+4. Replace local Chroma with managed pgvector embeddings for semantic search over millions of job postings.
 5. Add OpenSearch/Elasticsearch for keyword + metadata filtering.
 6. Add background workers (Celery/RQ/Kafka) for ingestion.
 7. Add object storage (S3/GCS) and virus scanning for uploads.
 8. Add authentication, tenant isolation, RBAC, audit logs, rate limiting, encryption, retention/deletion controls.
 9. Add connectors for licensed historical-job datasets instead of scraping sites that prohibit it.
-10. Add explainable LLM summaries only after deterministic evidence retrieval.
+10. Add evaluation datasets, prompt/version tracking, and human review for LLM summaries.
 
 ## Important interpretation rule
 
