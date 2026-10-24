@@ -6,6 +6,8 @@ class Settings(BaseSettings):
     max_upload_mb: int = 10
 
     email_provider: str = "resend"
+    resend_api_key: str = ""
+    otp_from_email: str = ""
     gmail_client_id: str = ""
     gmail_client_secret: str = ""
     gmail_refresh_token: str = ""

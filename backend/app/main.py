@@ -626,6 +626,48 @@ def analysis_rewrite(analysis_id: int, body: RewriteIn | None = None, db: Sessio
     }
 
 
+
+@app.post("/api/analyses/{analysis_id}/interview-prep")
+def interview_prep(analysis_id: int, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    """Deterministic interview-prep agent: no LLM key required.
+
+    Turns an existing analysis into practice questions. It uses only the
+    analysis already stored for this user: missing skills become gap
+    questions, matched skills become depth questions.
+    """
+    row = _owned_analysis(analysis_id, db, user)
+    result = row.result or {}
+    missing = [x for x in (result.get("missing_skills") or []) if isinstance(x, str)][:5]
+    matched = [x for x in (result.get("matched_skills") or []) if isinstance(x, str)][:3]
+    questions = []
+    for skill in missing:
+        questions.append({
+            "type": "gap",
+            "skill": skill,
+            "question": f"Describe a project where you would use {skill}, and what result you would measure.",
+        })
+    for skill in matched:
+        questions.append({
+            "type": "depth",
+            "skill": skill,
+            "question": f"Walk through a real example where you used {skill} in production. What broke, and how did you fix it?",
+        })
+    if not questions:
+        questions.append({
+            "type": "general",
+            "skill": "",
+            "question": "Walk through your most relevant project for this role, end to end: problem, approach, and measured outcome.",
+        })
+    return {
+        "analysis_id": row.id,
+        "target_title": result.get("target_title"),
+        "target_company": result.get("target_company"),
+        "focus_skills": missing,
+        "strengths": matched,
+        "questions": questions,
+    }
+
+
 @app.post("/api/coach/chat")
 def coach_chat(body: CoachChatRequest, db: Session = Depends(get_db), user: User = Depends(current_user)):
     del db, user

@@ -1,0 +1,7 @@
+__pycache__
+*.pyc
+.pytest_cache
+.env
+.chroma
+resume_verifier.db
+company_tools.db
